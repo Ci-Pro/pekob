@@ -76,7 +76,7 @@ function HomePage() {
       {featuredVideo && <HeroSection />}
 
       {/* Main Content */}
-      <main className="flex-1 px-4 sm:px-6 pb-8">
+      <main className="flex-1 px-4 sm:px-6 pb-8 pt-4">
         <div className="max-w-7xl mx-auto space-y-8 sm:space-y-10">
           {/* Category Bar */}
           <CategoryBar />
