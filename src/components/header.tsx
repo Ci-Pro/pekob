@@ -61,8 +61,8 @@ export function Header() {
 
           {/* Nav Links */}
           <nav className="hidden md:flex items-center gap-1">
-            <NavLink label="Beranda" onClick={() => setActiveCategory("Semua")} />
-            <NavLink label="Trending" icon={<Flame className="w-3.5 h-3.5" />} onClick={() => setActiveCategory("Semua")} />
+            <NavLink label="Beranda" onClick={() => setActiveCategory("")} />
+            <NavLink label="Trending" icon={<Flame className="w-3.5 h-3.5" />} onClick={() => setActiveCategory("")} />
           </nav>
 
           {/* Mobile Menu Toggle */}

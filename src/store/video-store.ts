@@ -26,7 +26,7 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
   featuredVideo: null,
   selectedVideo: null,
   isPlayerOpen: false,
-  activeCategory: "Semua",
+  activeCategory: "",
   categories: [],
   searchQuery: "",
   isLoading: true,

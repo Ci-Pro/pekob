@@ -44,7 +44,7 @@ function HomePage() {
       setLoading(true);
       try {
         const params = new URLSearchParams();
-        if (activeCategory && activeCategory !== "Semua")
+        if (activeCategory)
           params.set("category", activeCategory);
         if (searchQuery) params.set("search", searchQuery);
 
@@ -117,16 +117,12 @@ function HomePage() {
           <VideoGrid
             videos={filteredVideos}
             isLoading={isLoading}
-            title={
-              activeCategory && activeCategory !== "Semua"
-                ? `${activeCategory}`
-                : "Video Terbaru"
-            }
+            title={activeCategory || "Video Terbaru"}
             emptyMessage="Tidak ada video ditemukan"
           />
 
           {/* Trending Section */}
-          {!searchQuery && activeCategory === "Semua" && <TrendingSection />}
+          {!searchQuery && !activeCategory && <TrendingSection />}
         </div>
       </main>
 

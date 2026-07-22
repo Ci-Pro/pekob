@@ -16,7 +16,8 @@ export function CategoryBar() {
     }
   };
 
-  const allCategories = ["Semua", ...categories];
+  // Only show categories from admin input — no hardcoded values
+  if (categories.length === 0) return null;
 
   return (
     <div className="relative group">
@@ -34,18 +35,20 @@ export function CategoryBar() {
         <ChevronRight className="w-4 h-4" />
       </button>
 
-      {/* Categories */}
+      {/* Categories — only from database */}
       <div
         ref={scrollRef}
         className="flex gap-2 overflow-x-auto scrollbar-none pb-2 px-1"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
-        {allCategories.map((category) => (
+        {categories.map((category) => (
           <CategoryChip
             key={category}
             label={category}
             isActive={activeCategory === category}
-            onClick={() => setActiveCategory(category)}
+            onClick={() =>
+              setActiveCategory(activeCategory === category ? "" : category)
+            }
           />
         ))}
       </div>
