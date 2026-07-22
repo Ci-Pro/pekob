@@ -11,18 +11,3 @@ export interface Video {
   createdAt: string;
   updatedAt: string;
 }
-
-export const CATEGORIES = [
-  "Semua",
-  "Film",
-  "Musik",
-  "Komedi",
-  "Gaming",
-  "Olahraga",
-  "Kuliner",
-  "Edukasi",
-  "Viral",
-  "Dokumenter",
-] as const;
-
-export type Category = (typeof CATEGORIES)[number];

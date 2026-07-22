@@ -1,13 +1,12 @@
 "use client";
 
 import { useVideoStore } from "@/store/video-store";
-import { CATEGORIES, type Category } from "@/types/video";
 import { useRef } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
 
 export function CategoryBar() {
-  const { activeCategory, setActiveCategory } = useVideoStore();
+  const { activeCategory, setActiveCategory, categories } = useVideoStore();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const scroll = (dir: "left" | "right") => {
@@ -16,6 +15,8 @@ export function CategoryBar() {
       scrollRef.current.scrollBy({ left: amount, behavior: "smooth" });
     }
   };
+
+  const allCategories = ["Semua", ...categories];
 
   return (
     <div className="relative group">
@@ -39,7 +40,7 @@ export function CategoryBar() {
         className="flex gap-2 overflow-x-auto scrollbar-none pb-2 px-1"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
-        {CATEGORIES.map((category) => (
+        {allCategories.map((category) => (
           <CategoryChip
             key={category}
             label={category}
@@ -57,7 +58,7 @@ function CategoryChip({
   isActive,
   onClick,
 }: {
-  label: Category;
+  label: string;
   isActive: boolean;
   onClick: () => void;
 }) {

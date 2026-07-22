@@ -19,10 +19,26 @@ function HomePage() {
     searchQuery,
     setVideos,
     setFeaturedVideo,
+    setCategories,
     setLoading,
     isLoading,
   } = useVideoStore();
 
+  // Fetch categories on mount
+  useEffect(() => {
+    async function fetchCategories() {
+      try {
+        const res = await fetch("/api/categories");
+        const data = await res.json();
+        setCategories(data.categories || []);
+      } catch {
+        console.error("Failed to fetch categories");
+      }
+    }
+    fetchCategories();
+  }, [setCategories]);
+
+  // Fetch videos when category or search changes
   useEffect(() => {
     async function fetchVideos() {
       setLoading(true);
@@ -35,6 +51,11 @@ function HomePage() {
         const res = await fetch(`/api/videos?${params.toString()}`);
         const data = await res.json();
         setVideos(data.videos || []);
+
+        // Refresh categories from latest data
+        const catRes = await fetch("/api/categories");
+        const catData = await catRes.json();
+        setCategories(catData.categories || []);
       } catch (err) {
         console.error("Failed to fetch videos:", err);
       } finally {
@@ -42,8 +63,9 @@ function HomePage() {
       }
     }
     fetchVideos();
-  }, [activeCategory, searchQuery, setVideos, setLoading]);
+  }, [activeCategory, searchQuery, setVideos, setCategories, setLoading]);
 
+  // Fetch featured video
   useEffect(() => {
     async function fetchFeatured() {
       try {

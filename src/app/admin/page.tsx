@@ -1,19 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { CATEGORIES } from "@/types/video";
 import type { Video } from "@/types/video";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -33,15 +25,48 @@ import {
   Eye,
   Star,
   Search,
-  LogOut,
   Loader2,
   X,
   ChevronLeft,
   Tv,
+  Tag,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+
+function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function detectVideoDuration(file: File): Promise<string | null> {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    const url = URL.createObjectURL(file);
+
+    video.onloadedmetadata = () => {
+      const duration = formatDuration(video.duration);
+      URL.revokeObjectURL(url);
+      resolve(duration);
+    };
+
+    video.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(null);
+    };
+
+    video.src = url;
+  });
+}
 
 export default function AdminPage() {
   const [videos, setVideos] = useState<Video[]>([]);
@@ -51,20 +76,24 @@ export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ thumbnail: false, video: false });
+  const [detectingDuration, setDetectingDuration] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form state
   const [form, setForm] = useState({
     title: "",
     description: "",
-    category: "Film",
+    category: "",
     videoUrl: "",
     thumbnailUrl: "",
     thumbnailFile: null as File | null,
     videoFile: null as File | null,
-    duration: "",
+    duration: "" as string | null,
     isFeatured: false,
   });
+
+  // Existing categories for suggestions
+  const existingCategories = [...new Set(videos.map((v) => v.category))].sort();
 
   const fetchVideos = useCallback(async () => {
     setIsLoading(true);
@@ -87,16 +116,17 @@ export default function AdminPage() {
     setForm({
       title: "",
       description: "",
-      category: "Film",
+      category: "",
       videoUrl: "",
       thumbnailUrl: "",
       thumbnailFile: null,
       videoFile: null,
-      duration: "",
+      duration: null,
       isFeatured: false,
     });
     setEditingVideo(null);
     setUploadProgress({ thumbnail: false, video: false });
+    setDetectingDuration(false);
   };
 
   const openCreate = () => {
@@ -113,35 +143,62 @@ export default function AdminPage() {
       thumbnailUrl: video.thumbnailUrl,
       thumbnailFile: null,
       videoFile: null,
-      duration: video.duration || "",
+      duration: video.duration || null,
       isFeatured: video.isFeatured,
     });
     setEditingVideo(video);
     setIsFormOpen(true);
   };
 
-  const handleFileUpload = async (file: File, type: "thumbnail" | "video") => {
-    setUploadProgress((prev) => ({ ...prev, [type]: true }));
+  const handleThumbnailUpload = async (file: File) => {
+    setUploadProgress((prev) => ({ ...prev, thumbnail: true }));
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("type", type);
+      formData.append("type", "thumbnail");
 
       const res = await fetch("/api/upload", { method: "POST", body: formData });
       const data = await res.json();
 
       if (data.url) {
-        if (type === "thumbnail") {
-          setForm((prev) => ({ ...prev, thumbnailUrl: data.url, thumbnailFile: file }));
-        } else {
-          setForm((prev) => ({ ...prev, videoUrl: data.url, videoFile: file }));
-        }
-        toast.success(`${type === "thumbnail" ? "Thumbnail" : "Video"} berhasil diupload`);
+        setForm((prev) => ({ ...prev, thumbnailUrl: data.url, thumbnailFile: file }));
+        toast.success("Thumbnail berhasil diupload");
       }
     } catch {
-      toast.error(`Gagal upload ${type === "thumbnail" ? "thumbnail" : "video"}`);
+      toast.error("Gagal upload thumbnail");
     } finally {
-      setUploadProgress((prev) => ({ ...prev, [type]: false }));
+      setUploadProgress((prev) => ({ ...prev, thumbnail: false }));
+    }
+  };
+
+  const handleVideoUpload = async (file: File) => {
+    setUploadProgress((prev) => ({ ...prev, video: true }));
+    setDetectingDuration(true);
+
+    try {
+      // Auto-detect duration from video file
+      const duration = await detectVideoDuration(file);
+      if (duration) {
+        setForm((prev) => ({ ...prev, duration }));
+        toast.success(`Durasi terdeteksi: ${duration}`);
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("type", "video");
+
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const data = await res.json();
+
+      if (data.url) {
+        setForm((prev) => ({ ...prev, videoUrl: data.url, videoFile: file }));
+        toast.success("Video berhasil diupload");
+      }
+    } catch {
+      toast.error("Gagal upload video");
+    } finally {
+      setUploadProgress((prev) => ({ ...prev, video: false }));
+      setDetectingDuration(false);
     }
   };
 
@@ -152,10 +209,10 @@ export default function AdminPage() {
     try {
       // Upload files first if present
       if (form.thumbnailFile) {
-        await handleFileUpload(form.thumbnailFile, "thumbnail");
+        await handleThumbnailUpload(form.thumbnailFile);
       }
       if (form.videoFile) {
-        await handleFileUpload(form.videoFile, "video");
+        await handleVideoUpload(form.videoFile);
       }
 
       const payload = {
@@ -169,7 +226,6 @@ export default function AdminPage() {
       };
 
       if (editingVideo) {
-        // Update
         const res = await fetch(`/api/videos/${editingVideo.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -181,7 +237,6 @@ export default function AdminPage() {
           fetchVideos();
         }
       } else {
-        // Create
         const res = await fetch("/api/videos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -256,7 +311,7 @@ export default function AdminPage() {
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold">Kelola Video</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {videos.length} video tersedia
+              {videos.length} video tersedia &middot; {existingCategories.length} kategori
             </p>
           </div>
           <Button
@@ -326,13 +381,18 @@ export default function AdminPage() {
                     </h3>
                     <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                        {video.category}
+                        {video.category || "Tanpa kategori"}
                       </Badge>
                       <span className="flex items-center gap-1">
                         <Eye className="w-3 h-3" />
                         {video.views.toLocaleString("id-ID")}
                       </span>
-                      {video.duration && <span>{video.duration}</span>}
+                      {video.duration && (
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {video.duration}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -407,45 +467,40 @@ export default function AdminPage() {
               />
             </div>
 
-            {/* Category & Duration */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Kategori</Label>
-                <Select
-                  value={form.category}
-                  onValueChange={(val) =>
-                    setForm((prev) => ({ ...prev, category: val }))
-                  }
-                >
-                  <SelectTrigger className="bg-white/5 border-white/10 text-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-[#111] border-white/10">
-                    {CATEGORIES.filter((c) => c !== "Semua").map((cat) => (
-                      <SelectItem key={cat} value={cat}>
-                        {cat}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="duration">Durasi</Label>
-                <Input
-                  id="duration"
-                  value={form.duration}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, duration: e.target.value }))
-                  }
-                  placeholder="12:34"
-                  className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground"
-                />
-              </div>
+            {/* Category - Manual Input with Suggestions */}
+            <div className="space-y-2">
+              <Label htmlFor="category">
+                <span className="flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5" />
+                  Kategori *
+                </span>
+              </Label>
+              <Input
+                id="category"
+                list="category-suggestions"
+                value={form.category}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, category: e.target.value }))
+                }
+                placeholder="Ketik kategori baru atau pilih yang ada..."
+                className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground"
+                required
+              />
+              {existingCategories.length > 0 && (
+                <datalist id="category-suggestions">
+                  {existingCategories.map((cat) => (
+                    <option key={cat} value={cat} />
+                  ))}
+                </datalist>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Ketik kategori bebas, contoh: Film, Musik, Komedi, Gaming, dll.
+              </p>
             </div>
 
             {/* Thumbnail Upload */}
             <div className="space-y-2">
-              <Label>Thumbnail</Label>
+              <Label>Thumbnail *</Label>
               <div className="flex items-center gap-3">
                 {form.thumbnailUrl ? (
                   <div className="relative w-24 h-14 rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
@@ -488,10 +543,7 @@ export default function AdminPage() {
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) {
-                        setForm((prev) => ({
-                          ...prev,
-                          thumbnailFile: file,
-                        }));
+                        setForm((prev) => ({ ...prev, thumbnailFile: file }));
                       }
                     }}
                   />
@@ -501,7 +553,7 @@ export default function AdminPage() {
 
             {/* Video Upload or URL */}
             <div className="space-y-2">
-              <Label>Video (File atau URL)</Label>
+              <Label>Video (File atau URL) *</Label>
               <Input
                 value={form.videoUrl}
                 onChange={(e) =>
@@ -530,16 +582,22 @@ export default function AdminPage() {
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      setForm((prev) => ({
-                        ...prev,
-                        videoFile: file,
-                        videoUrl: file.name,
-                      }));
+                      setForm((prev) => ({ ...prev, videoFile: file }));
                     }
                   }}
                 />
               </label>
             </div>
+
+            {/* Duration - Auto detected indicator */}
+            {form.duration && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
+                <Clock className="w-4 h-4 text-green-400" />
+                <span className="text-sm text-green-400">
+                  Durasi terdeteksi otomatis: {form.duration}
+                </span>
+              </div>
+            )}
 
             {/* Featured Toggle */}
             <div className="flex items-center justify-between py-2">
@@ -567,7 +625,7 @@ export default function AdminPage() {
               </Button>
               <Button
                 type="submit"
-                disabled={isUploading || !form.title || !form.videoUrl || !form.thumbnailUrl}
+                disabled={isUploading || !form.title || !form.videoUrl || !form.thumbnailUrl || !form.category}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold gap-2"
               >
                 {isUploading ? (

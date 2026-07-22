@@ -1,19 +1,21 @@
 import { create } from "zustand";
-import type { Video, Category } from "@/types/video";
+import type { Video } from "@/types/video";
 
 interface VideoStore {
   videos: Video[];
   featuredVideo: Video | null;
   selectedVideo: Video | null;
   isPlayerOpen: boolean;
-  activeCategory: Category;
+  activeCategory: string;
+  categories: string[];
   searchQuery: string;
   isLoading: boolean;
   setVideos: (videos: Video[]) => void;
   setFeaturedVideo: (video: Video | null) => void;
   playVideo: (video: Video) => void;
   closePlayer: () => void;
-  setActiveCategory: (category: Category) => void;
+  setActiveCategory: (category: string) => void;
+  setCategories: (categories: string[]) => void;
   setSearchQuery: (query: string) => void;
   setLoading: (loading: boolean) => void;
   incrementView: (id: string) => void;
@@ -25,6 +27,7 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
   selectedVideo: null,
   isPlayerOpen: false,
   activeCategory: "Semua",
+  categories: [],
   searchQuery: "",
   isLoading: true,
 
@@ -38,13 +41,11 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
       selectedVideo: video,
       isPlayerOpen: true,
     });
-    // Update views optimistically
     set({
       videos: videos.map((v) =>
         v.id === video.id ? { ...v, views: v.views + 1 } : v
       ),
     });
-    // Also increment on server
     fetch("/api/videos", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -55,6 +56,8 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
   closePlayer: () => set({ isPlayerOpen: false, selectedVideo: null }),
 
   setActiveCategory: (category) => set({ activeCategory: category }),
+
+  setCategories: (categories) => set({ categories }),
 
   setSearchQuery: (query) => set({ searchQuery: query }),
 
