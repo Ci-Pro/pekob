@@ -61,7 +61,7 @@ export function VideoPlayerModal() {
         <Dialog open={isPlayerOpen} onOpenChange={() => handleClose()}>
           <DialogContent
             className="max-w-[95vw] lg:max-w-[90vw] xl:max-w-[85vw] h-[90vh] bg-black border-white/10 p-0 gap-0 overflow-hidden"
-            hideCloseButton
+            showCloseButton={false}
           >
             <DialogTitle className="sr-only">
               {selectedVideo.title}
