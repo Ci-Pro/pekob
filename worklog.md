@@ -201,3 +201,23 @@ Stage Summary:
 - Thumbnail is now optional — admin can add video without thumbnail
 - Placeholder gradient automatically shown when no thumbnail
 - All components gracefully handle missing thumbnails
+
+---
+Task ID: 9
+Agent: Main
+Task: Fix video upload hanging + categories fetch error
+
+Work Log:
+- Root cause: `upload_large()` requires a file **path string** as first argument, but we passed `undefined`. This caused the Cloudinary upload to crash silently, making the upload appear to hang forever.
+- Fixed: Reverted to `upload_stream()` for both image and video uploads (accepts buffers correctly)
+- Added `chunk_size: 6_000_000` for video uploads within upload_stream options
+- Removed unused `import { v2 as cloudinaryV2 }` (was only used for the broken upload_large call)
+- Added proper stream error handler with `.on("error", ...)`
+- Better error logging with `[Cloudinary]` prefix for easy debugging
+- Categories fetch error was a side effect of the server instability from the broken import
+- Lint clean, all endpoints verified, pushed to GitHub
+
+Stage Summary:
+- Video upload now works correctly — uses upload_stream with buffer and chunk_size for videos
+- No more silent crashes or hanging uploads
+- Clean error messages returned to admin panel
