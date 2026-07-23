@@ -315,30 +315,69 @@ function AdminDashboard() {
     setIsFormOpen(true);
   };
 
-  // Upload thumbnail to Cloudinary — returns URL on success, null on failure
+  // Upload thumbnail to Cloudinary via direct client-to-Cloudinary (bypasses server timeout)
   const handleThumbnailUpload = async (file: File): Promise<string | null> => {
     setUploadProgress((prev) => ({ ...prev, thumbnail: true }));
     toast.info("Mengupload thumbnail ke Cloudinary...");
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("type", "thumbnail");
-
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
-      const data = await res.json();
-
-      if (data.error) {
-        toast.error(data.error);
+      // Validate image file (client-side)
+      const validExts = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif", "avif", "svg"];
+      const ext = file.name.split(".").pop()?.toLowerCase() || "";
+      const isImage = file.type.startsWith("image/") || validExts.includes(ext);
+      if (!isImage) {
+        toast.error(`Format file "${file.type || ext || "unknown"}" tidak didukung. Gunakan: JPEG, PNG, GIF, WebP, BMP, TIFF, AVIF, SVG.`);
+        return null;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error("Ukuran thumbnail melebihi 10MB");
         return null;
       }
 
-      if (data.url) {
-        setForm((prev) => ({ ...prev, thumbnailUrl: data.url, thumbnailFile: null }));
+      // Fetch Cloudinary config
+      const configRes = await fetch("/api/cloudinary-config");
+      const config = await configRes.json();
+      if (config.error) throw new Error("Cloudinary belum dikonfigurasi");
+
+      const cloudUploadUrl = `${config.uploadUrl}/image/upload`;
+
+      const result = await new Promise<{
+        secure_url: string;
+        public_id: string;
+        format?: string;
+        error?: { message?: string };
+      }>((resolve, reject) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("upload_preset", config.uploadPreset);
+        formData.append("folder", "pekob/thumbnails");
+
+        const xhr = new XMLHttpRequest();
+        xhr.addEventListener("load", () => {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            if (data.error) {
+              reject(new Error(data.error.message || "Cloudinary upload gagal"));
+            } else {
+              resolve(data);
+            }
+          } catch {
+            reject(new Error("Gagal memproses respons Cloudinary"));
+          }
+        });
+        xhr.addEventListener("error", () => reject(new Error("Gagal upload thumbnail ke Cloudinary")));
+        xhr.addEventListener("timeout", () => reject(new Error("Upload timeout — koneksi lambat")));
+        xhr.timeout = 60000; // 1 minute timeout for images
+        xhr.open("POST", cloudUploadUrl);
+        xhr.send(formData);
+      });
+
+      if (result.secure_url) {
+        setForm((prev) => ({ ...prev, thumbnailUrl: result.secure_url, thumbnailFile: null }));
         toast.success("Thumbnail berhasil diupload");
-        return data.url;
+        return result.secure_url;
       }
-    } catch {
-      toast.error("Gagal upload thumbnail ke Cloudinary");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal upload thumbnail ke Cloudinary");
     } finally {
       setUploadProgress((prev) => ({ ...prev, thumbnail: false }));
     }
