@@ -2,19 +2,61 @@
 
 import type { Video } from "@/types/video";
 import { useVideoStore } from "@/store/video-store";
-import { Play, Eye, Clock, Film } from "lucide-react";
+import { Play, Eye, Clock, Film, Globe } from "lucide-react";
 import { motion } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 
+// Generate auto-thumbnail URL from video/embed URL
+function getAutoThumbnail(video: Video): string | null {
+  if (!video.videoUrl) return null;
+
+  // Cloudinary video: extract public_id and generate video thumbnail
+  try {
+    const cloudMatch = video.videoUrl.match(/res\.cloudinary\.com\/([^/]+)\/video\/upload\/(?:v\d+\/)?(.+?)(?:\.\w+)?$/);
+    if (cloudMatch) {
+      return `https://res.cloudinary.com/${cloudMatch[1]}/video/upload/w_640,h_360,c_fill/${cloudMatch[2]}.jpg`;
+    }
+  } catch { /* fallback */ }
+
+  // YouTube
+  const ytMatch = video.videoUrl.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  if (ytMatch) return `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
+
+  // Vimeo
+  const vimeoMatch = video.videoUrl.match(/(?:player\.vimeo\.com\/video\/|vimeo\.com\/(?:video\/)?)(\d+)/);
+  if (vimeoMatch) return `https://vumbnail.com/${vimeoMatch[1]}.jpg`;
+
+  // Dailymotion
+  const dmMatch = video.videoUrl.match(/dailymotion\.com\/(?:embed\/)?video\/([a-zA-Z0-9]+)/);
+  if (dmMatch) return `https://www.dailymotion.com/thumbnail/video/${dmMatch[1]}`;
+
+  return null;
+}
+
 function ThumbnailImage({ video }: { video: Video }) {
-  if (video.thumbnailUrl) {
+  // Priority: uploaded thumbnail → auto-generated thumbnail → gradient fallback
+  const autoThumb = getAutoThumbnail(video);
+  const src = video.thumbnailUrl || autoThumb;
+
+  if (src) {
     return (
       <img
-        src={video.thumbnailUrl}
+        src={src}
         alt={video.title}
         className="w-full h-full object-cover"
+        loading="lazy"
       />
+    );
+  }
+
+  // Embed video without auto-thumbnail → show embed icon
+  if (video.videoSource === "embed") {
+    return (
+      <div className="w-full h-full bg-gradient-to-br from-purple-900/40 via-indigo-900/30 to-black flex flex-col items-center justify-center gap-2">
+        <Globe className="w-8 h-8 text-white/20" />
+        <span className="text-[10px] text-white/20">Embed Video</span>
+      </div>
     );
   }
 

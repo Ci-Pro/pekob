@@ -77,7 +77,7 @@ const EMBED_PROVIDERS: { name: string; pattern: RegExp; embedUrl: (id: string) =
   },
 ];
 
-type EmbedInfo = { provider: string; id: string; embedUrl: string } | null;
+type EmbedInfo = { provider: string; id: string; embedUrl: string; thumbnailUrl?: string } | null;
 
 function detectEmbedUrl(url: string): EmbedInfo {
   if (!url) return null;
@@ -88,6 +88,7 @@ function detectEmbedUrl(url: string): EmbedInfo {
         provider: provider.name,
         id: match[1],
         embedUrl: provider.embedUrl(match[1]),
+        thumbnailUrl: generateAutoThumbnail(url, "embed"),
       };
     }
   }
@@ -101,6 +102,38 @@ function isValidUrl(str: string): boolean {
   } catch {
     return false;
   }
+}
+
+// Generate auto-thumbnail URL from video/embed URL
+function generateAutoThumbnail(url: string, videoSource: string): string | null {
+  if (!url) return null;
+
+  if (videoSource === "upload") {
+    // Cloudinary video: extract public_id and generate video thumbnail
+    // Pattern: https://res.cloudinary.com/{cloud}/video/upload/.../file.ext
+    try {
+      const cloudMatch = url.match(/res\.cloudinary\.com\/([^/]+)\/video\/upload\/(?:v\d+\/)?(.+?)(?:\.\w+)?$/);
+      if (cloudMatch) {
+        return `https://res.cloudinary.com/${cloudMatch[1]}/video/upload/w_640,h_360,c_fill/${cloudMatch[2]}.jpg`;
+      }
+    } catch { /* fallback */ }
+    return null;
+  }
+
+  // YouTube
+  const ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  if (ytMatch) return `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
+
+  // Vimeo
+  const vimeoMatch = url.match(/(?:vimeo\.com\/)(?:video\/)?(\d+)/);
+  if (vimeoMatch) return `https://vumbnail.com/${vimeoMatch[1]}.jpg`;
+
+  // Dailymotion
+  const dmMatch = url.match(/dailymotion\.com\/(?:embed\/)?video\/([a-zA-Z0-9]+)/);
+  if (dmMatch) return `https://www.dailymotion.com/thumbnail/video/${dmMatch[1]}`;
+
+  // For unknown platforms, no auto-thumbnail available
+  return null;
 }
 
 function AdminAuthGuard({ children }: { children: React.ReactNode }) {
@@ -382,7 +415,14 @@ function AdminDashboard() {
             : `${m}:${String(s).padStart(2, "0")}`;
           setForm((prev) => ({ ...prev, duration: durStr }));
         }
-        setForm((prev) => ({ ...prev, videoUrl: result.secure_url, videoFile: file }));
+        // Auto-generate thumbnail from Cloudinary video URL
+        const autoThumb = generateAutoThumbnail(result.secure_url, "upload");
+        setForm((prev) => ({
+          ...prev,
+          videoUrl: result.secure_url,
+          videoFile: file,
+          ...(autoThumb && !prev.thumbnailUrl ? { thumbnailUrl: autoThumb } : {}),
+        }));
         toast.success("Video berhasil diupload ke Cloudinary");
       }
     } catch (err) {
@@ -429,6 +469,8 @@ function AdminDashboard() {
 
       if (videoInputMode === "embed" && form.embedUrl) {
         // Convert share URL to embed URL for storage
+        // If known provider → use provider embed URL
+        // If unknown → use the URL as-is (free embed)
         let embedSrc = form.embedUrl;
         if (embedInfo && embedInfo.embedUrl) {
           embedSrc = embedInfo.embedUrl;
@@ -438,12 +480,9 @@ function AdminDashboard() {
 
         // Auto-generate thumbnail from embed if no thumbnail set
         if (!form.thumbnailUrl) {
-          const ytMatch = form.embedUrl.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-          if (ytMatch) {
-            setForm((prev) => ({
-              ...prev,
-              thumbnailUrl: `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`,
-            }));
+          const autoThumb = embedInfo?.thumbnailUrl || generateAutoThumbnail(form.embedUrl, "embed");
+          if (autoThumb) {
+            setForm((prev) => ({ ...prev, thumbnailUrl: autoThumb }));
           }
         }
       }
@@ -917,7 +956,7 @@ function AdminDashboard() {
                       id="embedUrl"
                       value={form.embedUrl}
                       onChange={(e) => handleEmbedUrlChange(e.target.value)}
-                      placeholder='Paste URL YouTube, Vimeo, dll. — atau paste langsung <iframe src="...">'
+                      placeholder='Paste URL video atau paste langsung <iframe src="..."> — semua platform didukung'
                       className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground text-sm"
                     />
                   </div>
@@ -928,7 +967,7 @@ function AdminDashboard() {
                       <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
                         <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
                         <span className="text-xs text-green-400">
-                          Terdeteksi: <strong>{embedInfo.provider}</strong>
+                          Terdeteksi: <strong>{embedInfo.provider}</strong> — auto-convert ke embed URL
                         </span>
                       </div>
                       {/* Show the actual iframe src URL that will be used */}
@@ -943,13 +982,23 @@ function AdminDashboard() {
                     </div>
                   )}
 
-                  {/* Unsupported URL warning */}
+                  {/* Free embed: any valid URL works */}
                   {form.embedUrl && isValidUrl(form.embedUrl) && !embedInfo && (
-                    <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                      <Globe className="w-4 h-4 text-yellow-400" />
-                      <span className="text-xs text-yellow-400">
-                        URL tidak dikenali. Video akan dicoba langsung dimuat sebagai iframe.
-                      </span>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
+                        <Globe className="w-4 h-4 text-green-400 flex-shrink-0" />
+                        <span className="text-xs text-green-400">
+                          URL valid — akan langsung digunakan sebagai iframe src
+                        </span>
+                      </div>
+                      <div className="px-3 py-2 bg-white/[0.03] border border-white/5 rounded-lg">
+                        <p className="text-[10px] text-muted-foreground mb-1 font-medium">
+                          iframe src yang akan digunakan:
+                        </p>
+                        <code className="block text-[10px] text-orange-400 break-all leading-relaxed">
+                          {form.embedUrl}
+                        </code>
+                      </div>
                     </div>
                   )}
 
@@ -963,11 +1012,13 @@ function AdminDashboard() {
                     </div>
                   )}
 
-                  {/* Supported providers info */}
+                  {/* Info box */}
                   <div className="px-3 py-2 bg-white/[0.03] border border-white/5 rounded-lg">
-                    <p className="text-[10px] text-muted-foreground mb-1.5 font-medium">Platform yang didukung:</p>
+                    <p className="text-[10px] text-muted-foreground mb-1.5 font-medium">
+                      ✨ Semua platform didukung — paste URL video atau iframe embed
+                    </p>
                     <div className="flex flex-wrap gap-1.5">
-                      {["YouTube", "Vimeo", "Dailymotion", "TikTok", "Facebook", "Instagram"].map((p) => (
+                      {["YouTube", "Vimeo", "Dailymotion", "TikTok", "Facebook", "Instagram", "Bilibili", "NicoNico", "Lainnya"].map((p) => (
                         <Badge key={p} variant="outline" className="text-[9px] px-1.5 py-0 border-white/10 text-muted-foreground">
                           {p}
                         </Badge>
@@ -980,7 +1031,7 @@ function AdminDashboard() {
 
             {/* Thumbnail Upload */}
             <div className="space-y-2">
-              <Label>Thumbnail {(videoInputMode === "embed" && embedInfo?.provider === "YouTube") ? "(otomatis dari YouTube)" : "(opsional)"}</Label>
+              <Label>Thumbnail (opsional — otomatis dari video/embed jika tidak diupload)</Label>
               <div className="flex items-center gap-3">
                 {form.thumbnailUrl ? (
                   <div className="relative w-24 h-14 rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
