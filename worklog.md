@@ -144,3 +144,35 @@ Stage Summary:
 - Dev script updated to unset shell DATABASE_URL to prevent SQLite override
 - All endpoints verified working with Neon database
 - Real-time sync (`/api/sync` polling) works with Neon PostgreSQL
+
+---
+Task ID: 7
+Agent: Main
+Task: Integrate Cloudinary for video and thumbnail hosting
+
+Work Log:
+- Installed `cloudinary` v2.10.0 SDK
+- Created `src/lib/cloudinary.ts`: Cloudinary v2 config with env-based credentials
+- Rewrote `src/app/api/upload/route.ts`: replaced local file storage with Cloudinary uploads
+  - Video → `pekob/videos` folder, resource_type: video, 6MB chunk size, max 100MB
+  - Thumbnail → `pekob/thumbnails` folder, resource_type: image, max 10MB
+  - Returns secure_url, publicId, duration (for video)
+  - File validation (size limits, type checks)
+  - Config validation (returns error if Cloudinary env vars missing)
+- Updated `next.config.ts`: added `res.cloudinary.com` to `images.remotePatterns` for `next/image`
+- Updated admin panel (`src/app/admin/page.tsx`):
+  - Toast messages now mention Cloudinary
+  - Error handling for API error responses
+  - Cloudinary duration fallback for video length detection
+  - Upload labels updated: "Upload file video ke Cloudinary (maks 100MB)"
+- Updated `.env.example` with Cloudinary variable documentation
+- Lint passes clean, all API endpoints verified
+- Pushed to GitHub: `Ci-Pro/pekob` main branch
+
+Stage Summary:
+- Cloudinary fully integrated for all video and thumbnail uploads
+- Videos uploaded to Cloudinary pekob/videos folder with chunked uploads
+- Thumbnails uploaded to Cloudinary pekob/thumbnails folder
+- `next/image` configured for Cloudinary domain
+- Admin panel shows Cloudinary-specific messages and errors
+- User needs to set 3 env vars on Vercel: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
