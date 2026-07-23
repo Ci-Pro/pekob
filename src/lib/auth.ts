@@ -4,6 +4,8 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 
 export const authOptions: NextAuthOptions = {
+  // Ensure correct base URL for callbacks in both dev and production
+  url: process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"),
   providers: [
     CredentialsProvider({
       name: "Admin Login",
@@ -40,7 +42,7 @@ export const authOptions: NextAuthOptions = {
             role: "admin",
           };
         } catch (error) {
-          console.error("[Auth] Error:", error);
+          console.error("[Auth] authorize error:", error);
           return null;
         }
       },
