@@ -181,11 +181,11 @@ export function VideoPlayerModal() {
                     <h2 className="text-lg sm:text-xl font-bold text-white flex-1">
                       {selectedVideo.title}
                     </h2>
-                    {(isEmbed || legacyYoutubeEmbed) && (
-                      <Badge className="border-orange-500/30 text-orange-400 text-[10px]">
+                    {(isEmbed || !!legacyEmbedUrl) && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border border-orange-500/30 text-orange-400">
                         <Globe className="w-2.5 h-2.5 mr-0.5" />
                         Embed
-                      </Badge>
+                      </span>
                     )}
                   </div>
 
@@ -256,15 +256,6 @@ export function VideoPlayerModal() {
         </Dialog>
       )}
     </AnimatePresence>
-  );
-}
-
-// Need a simple Badge since we moved away from import
-function Badge({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${className || ""}`}>
-      {children}
-    </span>
   );
 }
 
