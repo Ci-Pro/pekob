@@ -1,0 +1,1176 @@
+     1→"use client";
+     2→
+     3→import { useState, useEffect, useCallback, useRef } from "react";
+     4→import { useRouter } from "next/navigation";
+     5→import { signOut } from "next-auth/react";
+     6→import type { Video } from "@/types/video";
+     7→import { Button } from "@/components/ui/button";
+     8→import { Input } from "@/components/ui/input";
+     9→import { Label } from "@/components/ui/label";
+    10→import { Textarea } from "@/components/ui/textarea";
+    11→import {
+    12→  Dialog,
+    13→  DialogContent,
+    14→  DialogHeader,
+    15→  DialogTitle,
+    16→} from "@/components/ui/dialog";
+    17→import { Switch } from "@/components/ui/switch";
+    18→import { Badge } from "@/components/ui/badge";
+    19→import { Skeleton } from "@/components/ui/skeleton";
+    20→import {
+    21→  Upload,
+    22→  Trash2,
+    23→  Edit2,
+    24→  Plus,
+    25→  Image as ImageIcon,
+    26→  Film,
+    27→  Eye,
+    28→  Star,
+    29→  Search,
+    30→  Loader2,
+    31→  X,
+    32→  ChevronLeft,
+    33→  Tv,
+    34→  Tag,
+    35→  Clock,
+    36→  LogOut,
+    37→  ShieldCheck,
+    38→  Link2,
+    39→  Globe,
+    40→  Check,
+    41→} from "lucide-react";
+    42→import { toast } from "sonner";
+    43→import { motion, AnimatePresence } from "framer-motion";
+    44→import Link from "next/link";
+    45→
+    46→// ── Embed URL detectors ──
+    47→const EMBED_PROVIDERS: { name: string; pattern: RegExp; embedUrl: (id: string) => string }[] = [
+    48→  {
+    49→    name: "YouTube",
+    50→    pattern: /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+    51→    embedUrl: (id) => `https://www.youtube.com/embed/${id}?autoplay=1&rel=0`,
+    52→  },
+    53→  {
+    54→    name: "Vimeo",
+    55→    pattern: /(?:https?:\/\/)?(?:www\.|player\.)?vimeo\.com\/(?:video\/)?(\d+)/,
+    56→    embedUrl: (id) => `https://player.vimeo.com/video/${id}?autoplay=1`,
+    57→  },
+    58→  {
+    59→    name: "Dailymotion",
+    60→    pattern: /(?:https?:\/\/)?(?:www\.)?(?:dailymotion\.com\/(?:embed\/)?video\/|dai\.ly\/)([a-zA-Z0-9]+)/,
+    61→    embedUrl: (id) => `https://www.dailymotion.com/embed/video/${id}?autoplay=1`,
+    62→  },
+    63→  {
+    64→    name: "TikTok",
+    65→    pattern: /(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@[^/]+\/video\/(\d+)/,
+    66→    embedUrl: (id) => `https://www.tiktok.com/embed/v2/${id}`,
+    67→  },
+    68→  {
+    69→    name: "Facebook",
+    70→    pattern: /(?:https?:\/\/)?(?:www\.)?facebook\.com\/.*\/videos\/(\d+)/,
+    71→    embedUrl: (id) => `https://www.facebook.com/plugins/video.php?href=https://www.facebook.com/watch/?v=${id}&autoplay=true`,
+    72→  },
+    73→  {
+    74→    name: "Instagram",
+    75→    pattern: /(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:p|reel)\/([a-zA-Z0-9_-]+)/,
+    76→    embedUrl: (id) => `https://www.instagram.com/p/${id}/embed/`,
+    77→  },
+    78→];
+    79→
+    80→type EmbedInfo = { provider: string; id: string; embedUrl: string; thumbnailUrl?: string } | null;
+    81→
+    82→function detectEmbedUrl(url: string): EmbedInfo {
+    83→  if (!url) return null;
+    84→  for (const provider of EMBED_PROVIDERS) {
+    85→    const match = url.match(provider.pattern);
+    86→    if (match && match[1]) {
+    87→      return {
+    88→        provider: provider.name,
+    89→        id: match[1],
+    90→        embedUrl: provider.embedUrl(match[1]),
+    91→        thumbnailUrl: generateAutoThumbnail(url, "embed"),
+    92→      };
+    93→    }
+    94→  }
+    95→  return null;
+    96→}
+    97→
+    98→function isValidUrl(str: string): boolean {
+    99→  try {
+   100→    new URL(str);
+   101→    return true;
+   102→  } catch {
+   103→    return false;
+   104→  }
+   105→}
+   106→
+   107→// Generate auto-thumbnail URL from video/embed URL
+   108→function generateAutoThumbnail(url: string, videoSource: string): string | null {
+   109→  if (!url) return null;
+   110→
+   111→  if (videoSource === "upload") {
+   112→    // Cloudinary video: extract public_id and generate video thumbnail
+   113→    // Pattern: https://res.cloudinary.com/{cloud}/video/upload/.../file.ext
+   114→    try {
+   115→      const cloudMatch = url.match(/res\.cloudinary\.com\/([^/]+)\/video\/upload\/(?:v\d+\/)?(.+?)(?:\.\w+)?$/);
+   116→      if (cloudMatch) {
+   117→        return `https://res.cloudinary.com/${cloudMatch[1]}/video/upload/w_640,h_360,c_fill/${cloudMatch[2]}.jpg`;
+   118→      }
+   119→    } catch { /* fallback */ }
+   120→    return null;
+   121→  }
+   122→
+   123→  // YouTube
+   124→  const ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+   125→  if (ytMatch) return `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
+   126→
+   127→  // Vimeo
+   128→  const vimeoMatch = url.match(/(?:vimeo\.com\/)(?:video\/)?(\d+)/);
+   129→  if (vimeoMatch) return `https://vumbnail.com/${vimeoMatch[1]}.jpg`;
+   130→
+   131→  // Dailymotion
+   132→  const dmMatch = url.match(/dailymotion\.com\/(?:embed\/)?video\/([a-zA-Z0-9]+)/);
+   133→  if (dmMatch) return `https://www.dailymotion.com/thumbnail/video/${dmMatch[1]}`;
+   134→
+   135→  // For unknown platforms, no auto-thumbnail available
+   136→  return null;
+   137→}
+   138→
+   139→function AdminAuthGuard({ children }: { children: React.ReactNode }) {
+   140→  const router = useRouter();
+   141→  const [isChecking, setIsChecking] = useState(true);
+   142→
+   143→  useEffect(() => {
+   144→    async function checkSession() {
+   145→      try {
+   146→        const res = await fetch("/api/admin/check-session");
+   147→        const data = await res.json();
+   148→        if (!data.authenticated) {
+   149→          router.replace("/admin/login");
+   150→          return;
+   151→        }
+   152→      } catch {
+   153→        router.replace("/admin/login");
+   154→        return;
+   155→      } finally {
+   156→        setIsChecking(false);
+   157→      }
+   158→    }
+   159→    checkSession();
+   160→  }, [router]);
+   161→
+   162→  if (isChecking) {
+   163→    return (
+   164→      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+   165→        <div className="flex flex-col items-center gap-4">
+   166→          <Loader2 className="w-8 h-8 animate-spin text-red-500" />
+   167→          <p className="text-sm text-muted-foreground">Memverifikasi akses...</p>
+   168→        </div>
+   169→      </div>
+   170→    );
+   171→  }
+   172→
+   173→  return <>{children}</>;
+   174→}
+   175→
+   176→function formatDuration(seconds: number): string {
+   177→  const h = Math.floor(seconds / 3600);
+   178→  const m = Math.floor((seconds % 3600) / 60);
+   179→  const s = Math.floor(seconds % 60);
+   180→
+   181→  if (h > 0) {
+   182→    return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+   183→  }
+   184→  return `${m}:${String(s).padStart(2, "0")}`;
+   185→}
+   186→
+   187→function detectVideoDuration(file: File): Promise<string | null> {
+   188→  return new Promise((resolve) => {
+   189→    const video = document.createElement("video");
+   190→    video.preload = "metadata";
+   191→    const url = URL.createObjectURL(file);
+   192→
+   193→    video.onloadedmetadata = () => {
+   194→      const duration = formatDuration(video.duration);
+   195→      URL.revokeObjectURL(url);
+   196→      resolve(duration);
+   197→    };
+   198→
+   199→    video.onerror = () => {
+   200→      URL.revokeObjectURL(url);
+   201→      resolve(null);
+   202→    };
+   203→
+   204→    video.src = url;
+   205→  });
+   206→}
+   207→
+   208→type VideoInputMode = "upload" | "embed";
+   209→
+   210→function AdminDashboard() {
+   211→  const router = useRouter();
+   212→  const [videos, setVideos] = useState<Video[]>([]);
+   213→  const [isLoading, setIsLoading] = useState(true);
+   214→  const [isFormOpen, setIsFormOpen] = useState(false);
+   215→  const [editingVideo, setEditingVideo] = useState<Video | null>(null);
+   216→  const [searchQuery, setSearchQuery] = useState("");
+   217→  const [isUploading, setIsUploading] = useState(false);
+   218→  const [uploadProgress, setUploadProgress] = useState({ thumbnail: false, video: false, percent: 0 });
+   219→  const [detectingDuration, setDetectingDuration] = useState(false);
+   220→  const [videoDragOver, setVideoDragOver] = useState(false);
+   221→  const [thumbDragOver, setThumbDragOver] = useState(false);
+   222→  const videoFileInputRef = useRef<HTMLInputElement>(null);
+   223→  const fileInputRef = useRef<HTMLInputElement>(null);
+   224→
+   225→  // Form state
+   226→  const [form, setForm] = useState({
+   227→    title: "",
+   228→    description: "",
+   229→    category: "",
+   230→    videoUrl: "",
+   231→    videoSource: "upload" as "upload" | "embed",
+   232→    embedUrl: "",
+   233→    thumbnailUrl: "",
+   234→    thumbnailFile: null as File | null,
+   235→    videoFile: null as File | null,
+   236→    duration: "" as string | null,
+   237→    isFeatured: false,
+   238→  });
+   239→
+   240→  // Video input mode (upload file or embed URL)
+   241→  const [videoInputMode, setVideoInputMode] = useState<VideoInputMode>("upload");
+   242→  // Embed info detected from URL
+   243→  const [embedInfo, setEmbedInfo] = useState<EmbedInfo>(null);
+   244→
+   245→  // Existing categories for suggestions
+   246→  const existingCategories = [...new Set(videos.map((v) => v.category))].sort();
+   247→
+   248→  const fetchVideos = useCallback(async () => {
+   249→    setIsLoading(true);
+   250→    try {
+   251→      const res = await fetch("/api/videos?limit=100");
+   252→      const data = await res.json();
+   253→      setVideos(data.videos || []);
+   254→    } catch {
+   255→      toast.error("Gagal memuat video");
+   256→    } finally {
+   257→      setIsLoading(false);
+   258→    }
+   259→  }, []);
+   260→
+   261→  useEffect(() => {
+   262→    fetchVideos();
+   263→  }, [fetchVideos]);
+   264→
+   265→  const resetForm = () => {
+   266→    setForm({
+   267→      title: "",
+   268→      description: "",
+   269→      category: "",
+   270→      videoUrl: "",
+   271→      videoSource: "upload",
+   272→      embedUrl: "",
+   273→      thumbnailUrl: "",
+   274→      thumbnailFile: null,
+   275→      videoFile: null,
+   276→      duration: null,
+   277→      isFeatured: false,
+   278→    });
+   279→    setEditingVideo(null);
+   280→    setUploadProgress({ thumbnail: false, video: false, percent: 0 });
+   281→    setDetectingDuration(false);
+   282→    setVideoInputMode("upload");
+   283→    setEmbedInfo(null);
+   284→  };
+   285→
+   286→  const openCreate = () => {
+   287→    resetForm();
+   288→    setIsFormOpen(true);
+   289→  };
+   290→
+   291→  const openEdit = (video: Video) => {
+   292→    const isEmbed = video.videoSource === "embed" || detectEmbedUrl(video.videoUrl) !== null;
+   293→    const embed = detectEmbedUrl(video.videoUrl);
+   294→    setForm({
+   295→      title: video.title,
+   296→      description: video.description || "",
+   297→      category: video.category,
+   298→      videoUrl: video.videoUrl,
+   299→      videoSource: video.videoSource || (isEmbed ? "embed" : "upload"),
+   300→      embedUrl: isEmbed ? video.videoUrl : "",
+   301→      thumbnailUrl: video.thumbnailUrl,
+   302→      thumbnailFile: null,
+   303→      videoFile: null,
+   304→      duration: video.duration || null,
+   305→      isFeatured: video.isFeatured,
+   306→    });
+   307→    setEditingVideo(video);
+   308→    setVideoInputMode(isEmbed ? "embed" : "upload");
+   309→    setEmbedInfo(embed);
+   310→    setIsFormOpen(true);
+   311→  };
+   312→
+   313→  const handleThumbnailUpload = async (file: File) => {
+   314→    setUploadProgress((prev) => ({ ...prev, thumbnail: true }));
+   315→    toast.info("Mengupload thumbnail ke Cloudinary...");
+   316→    try {
+   317→      const formData = new FormData();
+   318→      formData.append("file", file);
+   319→      formData.append("type", "thumbnail");
+   320→
+   321→      const res = await fetch("/api/upload", { method: "POST", body: formData });
+   322→      const data = await res.json();
+   323→
+   324→      if (data.error) {
+   325→        toast.error(data.error);
+   326→        return;
+   327→      }
+   328→
+   329→      if (data.url) {
+   330→        setForm((prev) => ({ ...prev, thumbnailUrl: data.url, thumbnailFile: file }));
+   331→        toast.success("Thumbnail berhasil diupload ke Cloudinary");
+   332→      }
+   333→    } catch {
+   334→      toast.error("Gagal upload thumbnail ke Cloudinary");
+   335→    } finally {
+   336→      setUploadProgress((prev) => ({ ...prev, thumbnail: false }));
+   337→    }
+   338→  };
+   339→
+   340→  const handleVideoUpload = async (file: File) => {
+   341→    setUploadProgress((prev) => ({ ...prev, video: true, percent: 0 }));
+   342→    setDetectingDuration(true);
+   343→    toast.info("Mengupload video ke Cloudinary...");
+   344→
+   345→    try {
+   346→      // Client-side duration detection as fallback
+   347→      const clientDuration = await detectVideoDuration(file);
+   348→      if (clientDuration) {
+   349→        setForm((prev) => ({ ...prev, duration: clientDuration }));
+   350→      }
+   351→
+   352→      // ── Direct client-to-Cloudinary upload (bypasses server timeout) ──
+   353→      // Fetch Cloudinary config
+   354→      const configRes = await fetch("/api/cloudinary-config");
+   355→      const config = await configRes.json();
+   356→
+   357→      if (config.error) {
+   358→        throw new Error("Cloudinary belum dikonfigurasi");
+   359→      }
+   360→
+   361→      const resourceType = "video";
+   362→      const cloudUploadUrl = `${config.uploadUrl}/${resourceType}/upload`;
+   363→
+   364→      const result = await new Promise<{
+   365→        secure_url: string;
+   366→        duration?: number;
+   367→        public_id: string;
+   368→        format?: string;
+   369→        error?: { message?: string };
+   370→      }>((resolve, reject) => {
+   371→        const formData = new FormData();
+   372→        formData.append("file", file);
+   373→        formData.append("upload_preset", config.uploadPreset);
+   374→        formData.append("folder", "pekob/videos");
+   375→        formData.append("resource_type", resourceType);
+   376→
+   377→        const xhr = new XMLHttpRequest();
+   378→
+   379→        // Track REAL upload progress to Cloudinary (not just to server)
+   380→        xhr.upload.addEventListener("progress", (e) => {
+   381→          if (e.lengthComputable) {
+   382→            const pct = Math.round((e.loaded / e.total) * 100);
+   383→            setUploadProgress((prev) => ({ ...prev, percent: pct }));
+   384→          }
+   385→        });
+   386→
+   387→        xhr.addEventListener("load", () => {
+   388→          try {
+   389→            const data = JSON.parse(xhr.responseText);
+   390→            if (data.error) {
+   391→              reject(new Error(data.error.message || "Cloudinary upload gagal"));
+   392→            } else {
+   393→              resolve(data);
+   394→            }
+   395→          } catch {
+   396→            reject(new Error("Gagal memproses respons Cloudinary"));
+   397→          }
+   398→        });
+   399→
+   400→        xhr.addEventListener("error", () => reject(new Error("Gagal upload video ke Cloudinary")));
+   401→        xhr.addEventListener("timeout", () => reject(new Error("Upload timeout — file terlalu besar atau koneksi lambat")));
+   402→        xhr.timeout = 600000; // 10 minute timeout for large videos
+   403→        xhr.open("POST", cloudUploadUrl);
+   404→        xhr.send(formData);
+   405→      });
+   406→
+   407→      if (result.secure_url) {
+   408→        // Use Cloudinary duration if available, otherwise keep client-detected
+   409→        if (result.duration && !clientDuration) {
+   410→          const h = Math.floor(result.duration / 3600);
+   411→          const m = Math.floor((result.duration % 3600) / 60);
+   412→          const s = result.duration % 60;
+   413→          const durStr = h > 0
+   414→            ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+   415→            : `${m}:${String(s).padStart(2, "0")}`;
+   416→          setForm((prev) => ({ ...prev, duration: durStr }));
+   417→        }
+   418→        // Auto-generate thumbnail from Cloudinary video URL
+   419→        const autoThumb = generateAutoThumbnail(result.secure_url, "upload");
+   420→        setForm((prev) => ({
+   421→          ...prev,
+   422→          videoUrl: result.secure_url,
+   423→          videoFile: file,
+   424→          ...(autoThumb && !prev.thumbnailUrl ? { thumbnailUrl: autoThumb } : {}),
+   425→        }));
+   426→        toast.success("Video berhasil diupload ke Cloudinary");
+   427→      }
+   428→    } catch (err) {
+   429→      toast.error(err instanceof Error ? err.message : "Gagal upload video ke Cloudinary");
+   430→    } finally {
+   431→      setUploadProgress((prev) => ({ ...prev, video: false, percent: 0 }));
+   432→      setDetectingDuration(false);
+   433→    }
+   434→  };
+   435→
+   436→  // Handle embed URL input change — also detect raw <iframe src="..."> paste
+   437→  const handleEmbedUrlChange = (raw: string) => {
+   438→    let url = raw.trim();
+   439→
+   440→    // If user pasted raw <iframe src="URL" ...>, extract the URL
+   441→    const iframeMatch = url.match(/<iframe[^>]+src=["']([^"']+)["'][^>]*>/i);
+   442→    if (iframeMatch) {
+   443→      url = iframeMatch[1];
+   444→    }
+   445→
+   446→    setForm((prev) => ({ ...prev, embedUrl: url }));
+   447→    const info = detectEmbedUrl(url);
+   448→    setEmbedInfo(info);
+   449→  };
+   450→
+   451→  const handleSubmit = async (e: React.FormEvent) => {
+   452→    e.preventDefault();
+   453→    setIsUploading(true);
+   454→
+   455→    try {
+   456→      // If upload mode: upload files first
+   457→      if (videoInputMode === "upload") {
+   458→        if (form.thumbnailFile) {
+   459→          await handleThumbnailUpload(form.thumbnailFile);
+   460→        }
+   461→        if (form.videoFile) {
+   462→          await handleVideoUpload(form.videoFile);
+   463→        }
+   464→      }
+   465→
+   466→      // Build the payload
+   467→      let finalVideoUrl = form.videoUrl;
+   468→      let finalVideoSource = "upload";
+   469→
+   470→      if (videoInputMode === "embed" && form.embedUrl) {
+   471→        // Convert share URL to embed URL for storage
+   472→        // If known provider → use provider embed URL
+   473→        // If unknown → use the URL as-is (free embed)
+   474→        let embedSrc = form.embedUrl;
+   475→        if (embedInfo && embedInfo.embedUrl) {
+   476→          embedSrc = embedInfo.embedUrl;
+   477→        }
+   478→        finalVideoUrl = embedSrc;
+   479→        finalVideoSource = "embed";
+   480→
+   481→        // Auto-generate thumbnail from embed if no thumbnail set
+   482→        if (!form.thumbnailUrl) {
+   483→          const autoThumb = embedInfo?.thumbnailUrl || generateAutoThumbnail(form.embedUrl, "embed");
+   484→          if (autoThumb) {
+   485→            setForm((prev) => ({ ...prev, thumbnailUrl: autoThumb }));
+   486→          }
+   487→        }
+   488→      }
+   489→
+   490→      const payload = {
+   491→        title: form.title,
+   492→        description: form.description,
+   493→        category: form.category,
+   494→        videoUrl: finalVideoUrl,
+   495→        videoSource: finalVideoSource,
+   496→        thumbnailUrl: form.thumbnailUrl || null,
+   497→        duration: form.duration,
+   498→        isFeatured: form.isFeatured,
+   499→      };
+   500→
+   501→      if (editingVideo) {
+   502→        const res = await fetch(`/api/videos/${editingVideo.id}`, {
+   503→          method: "PUT",
+   504→          headers: { "Content-Type": "application/json" },
+   505→          body: JSON.stringify(payload),
+   506→        });
+   507→        if (res.ok) {
+   508→          toast.success("Video berhasil diperbarui");
+   509→          setIsFormOpen(false);
+   510→          fetchVideos();
+   511→        } else {
+   512→          const err = await res.json();
+   513→          toast.error(err.error || "Gagal memperbarui video");
+   514→        }
+   515→      } else {
+   516→        const res = await fetch("/api/videos", {
+   517→          method: "POST",
+   518→          headers: { "Content-Type": "application/json" },
+   519→          body: JSON.stringify(payload),
+   520→        });
+   521→        if (res.ok) {
+   522→          toast.success("Video berhasil ditambahkan");
+   523→          setIsFormOpen(false);
+   524→          resetForm();
+   525→          fetchVideos();
+   526→        } else {
+   527→          const err = await res.json();
+   528→          toast.error(err.error || "Gagal menambahkan video");
+   529→        }
+   530→      }
+   531→    } catch {
+   532→      toast.error("Gagal menyimpan video");
+   533→    } finally {
+   534→      setIsUploading(false);
+   535→    }
+   536→  };
+   537→
+   538→  const handleDelete = async (id: string) => {
+   539→    if (!confirm("Yakin ingin menghapus video ini?")) return;
+   540→    try {
+   541→      const res = await fetch(`/api/videos/${id}`, { method: "DELETE" });
+   542→      if (res.ok) {
+   543→        toast.success("Video berhasil dihapus");
+   544→        fetchVideos();
+   545→      }
+   546→    } catch {
+   547→      toast.error("Gagal menghapus video");
+   548→    }
+   549→  };
+   550→
+   551→  const handleLogout = async () => {
+   552→    await signOut({ redirect: false });
+   553→    router.push("/admin/login");
+   554→  };
+   555→
+   556→  const filteredVideos = videos.filter(
+   557→    (v) =>
+   558→      v.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+   559→      v.category.toLowerCase().includes(searchQuery.toLowerCase())
+   560→  );
+   561→
+   562→  // Determine if the submit button should be disabled
+   563→  const isSubmitDisabled = isUploading || !form.title || !form.category || (
+   564→    videoInputMode === "upload" ? !form.videoUrl : !form.embedUrl
+   565→  );
+   566→
+   567→  return (
+   568→    <div className="min-h-screen bg-[#0a0a0a] text-white">
+   569→      {/* Admin Header */}
+   570→      <header className="sticky top-0 z-50 bg-black/90 backdrop-blur-xl border-b border-white/5">
+   571→        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16">
+   572→          <div className="flex items-center gap-3">
+   573→            <Link
+   574→              href="/"
+   575→              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors"
+   576→            >
+   577→              <ChevronLeft className="w-4 h-4" />
+   578→              Kembali ke Beranda
+   579→            </Link>
+   580→          </div>
+   581→          <div className="flex items-center gap-2 sm:gap-3">
+   582→            <div className="flex items-center gap-2">
+   583→              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-600 to-orange-500 flex items-center justify-center">
+   584→                <Tv className="w-4 h-4 text-white" />
+   585→              </div>
+   586→              <span className="text-sm font-black tracking-tighter bg-gradient-to-r from-red-500 to-orange-400 bg-clip-text text-transparent hidden sm:block">
+   587→                PEKOB
+   588→              </span>
+   589→            </div>
+   590→            <Badge variant="outline" className="border-red-500/30 text-red-400 text-xs">
+   591→              <ShieldCheck className="w-3 h-3 mr-1" />
+   592→              Admin
+   593→            </Badge>
+   594→            <button
+   595→              onClick={handleLogout}
+   596→              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-red-400 hover:bg-red-500/10 border border-white/5 hover:border-red-500/20 transition-all duration-200"
+   597→            >
+   598→              <LogOut className="w-3.5 h-3.5" />
+   599→              <span className="hidden sm:inline">Keluar</span>
+   600→            </button>
+   601→          </div>
+   602→        </div>
+   603→      </header>
+   604→
+   605→      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+   606→        {/* Stats Header */}
+   607→        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+   608→          <div>
+   609→            <h1 className="text-2xl sm:text-3xl font-bold">Kelola Video</h1>
+   610→            <p className="text-sm text-muted-foreground mt-1">
+   611→              {videos.length} video tersedia &middot; {existingCategories.length} kategori
+   612→            </p>
+   613→          </div>
+   614→          <Button
+   615→            onClick={openCreate}
+   616→            className="bg-red-600 hover:bg-red-700 text-white font-semibold gap-2 self-start"
+   617→          >
+   618→            <Plus className="w-4 h-4" />
+   619→            Tambah Video
+   620→          </Button>
+   621→        </div>
+   622→
+   623→        {/* Search */}
+   624→        <div className="relative mb-6 max-w-md">
+   625→          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   626→          <Input
+   627→            placeholder="Cari video..."
+   628→            value={searchQuery}
+   629→            onChange={(e) => setSearchQuery(e.target.value)}
+   630→            className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-muted-foreground focus:border-red-500/50"
+   631→          />
+   632→        </div>
+   633→
+   634→        {/* Video Table/List */}
+   635→        <div className="space-y-3">
+   636→          {isLoading ? (
+   637→            Array.from({ length: 5 }).map((_, i) => (
+   638→              <div
+   639→                key={i}
+   640→                className="flex items-center gap-4 p-3 bg-white/5 rounded-xl"
+   641→              >
+   642→                <Skeleton className="w-32 h-20 rounded-lg bg-white/10" />
+   643→                <div className="flex-1 space-y-2">
+   644→                  <Skeleton className="h-4 w-48 bg-white/10" />
+   645→                  <Skeleton className="h-3 w-32 bg-white/10" />
+   646→                </div>
+   647→              </div>
+   648→            ))
+   649→          ) : filteredVideos.length > 0 ? (
+   650→            <AnimatePresence>
+   651→              {filteredVideos.map((video, index) => (
+   652→                <motion.div
+   653→                  key={video.id}
+   654→                  initial={{ opacity: 0, y: 10 }}
+   655→                  animate={{ opacity: 1, y: 0 }}
+   656→                  exit={{ opacity: 0, x: -20 }}
+   657→                  transition={{ delay: index * 0.03 }}
+   658→                  className="group flex items-center gap-4 p-3 bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 hover:border-white/10 rounded-xl transition-all duration-200"
+   659→                >
+   660→                  {/* Thumbnail */}
+   661→                  <div className="relative w-28 sm:w-36 aspect-video rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
+   662→                    {video.thumbnailUrl ? (
+   663→                      <img
+   664→                        src={video.thumbnailUrl}
+   665→                        alt={video.title}
+   666→                        className="w-full h-full object-cover"
+   667→                      />
+   668→                    ) : (
+   669→                      <div className="w-full h-full bg-gradient-to-br from-red-900/40 via-orange-900/30 to-black flex items-center justify-center">
+   670→                        <Film className="w-5 h-5 text-white/20" />
+   671→                      </div>
+   672→                    )}
+   673→                    {video.isFeatured && (
+   674→                      <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-red-600 rounded text-[9px] font-bold uppercase">
+   675→                        Featured
+   676→                      </div>
+   677→                    )}
+   678→                  </div>
+   679→
+   680→                  {/* Info */}
+   681→                  <div className="flex-1 min-w-0">
+   682→                    <h3 className="text-sm font-semibold text-white line-clamp-1">
+   683→                      {video.title}
+   684→                    </h3>
+   685→                    <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
+   686→                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+   687→                        {video.category || "Tanpa kategori"}
+   688→                      </Badge>
+   689→                      {video.videoSource === "embed" && (
+   690→                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-500/30 text-orange-400">
+   691→                          <Globe className="w-2.5 h-2.5 mr-0.5" />
+   692→                          Embed
+   693→                        </Badge>
+   694→                      )}
+   695→                      <span className="flex items-center gap-1">
+   696→                        <Eye className="w-3 h-3" />
+   697→                        {video.views.toLocaleString("id-ID")}
+   698→                      </span>
+   699→                      {video.duration && (
+   700→                        <span className="flex items-center gap-1">
+   701→                          <Clock className="w-3 h-3" />
+   702→                          {video.duration}
+   703→                        </span>
+   704→                      )}
+   705→                    </div>
+   706→                  </div>
+   707→
+   708→                  {/* Actions */}
+   709→                  <div className="flex items-center gap-1.5 flex-shrink-0">
+   710→                    <button
+   711→                      onClick={() => openEdit(video)}
+   712→                      className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
+   713→                    >
+   714→                      <Edit2 className="w-3.5 h-3.5" />
+   715→                    </button>
+   716→                    <button
+   717→                      onClick={() => handleDelete(video.id)}
+   718→                      className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
+   719→                    >
+   720→                      <Trash2 className="w-3.5 h-3.5" />
+   721→                    </button>
+   722→                  </div>
+   723→                </motion.div>
+   724→              ))}
+   725→            </AnimatePresence>
+   726→          ) : (
+   727→            <div className="flex flex-col items-center justify-center py-16 text-center">
+   728→              <Film className="w-12 h-12 text-muted-foreground/30 mb-4" />
+   729→              <p className="text-muted-foreground text-sm">
+   730→                {searchQuery
+   731→                  ? "Tidak ada video yang cocok"
+   732→                  : "Belum ada video. Tambahkan video pertama!"}
+   733→              </p>
+   734→            </div>
+   735→          )}
+   736→        </div>
+   737→      </main>
+   738→
+   739→      {/* Upload/Edit Dialog */}
+   740→      <Dialog open={isFormOpen} onOpenChange={(open) => !open && setIsFormOpen(false)}>
+   741→        <DialogContent className="max-w-lg bg-[#111] border-white/10 text-white max-h-[90vh] overflow-y-auto">
+   742→          <DialogHeader>
+   743→            <DialogTitle className="text-lg font-bold">
+   744→              {editingVideo ? "Edit Video" : "Tambah Video Baru"}
+   745→            </DialogTitle>
+   746→          </DialogHeader>
+   747→
+   748→          <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+   749→            {/* Title */}
+   750→            <div className="space-y-2">
+   751→              <Label htmlFor="title">Judul Video *</Label>
+   752→              <Input
+   753→                id="title"
+   754→                value={form.title}
+   755→                onChange={(e) =>
+   756→                  setForm((prev) => ({ ...prev, title: e.target.value }))
+   757→                }
+   758→                placeholder="Masukkan judul video..."
+   759→                className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground"
+   760→                required
+   761→              />
+   762→            </div>
+   763→
+   764→            {/* Description */}
+   765→            <div className="space-y-2">
+   766→              <Label htmlFor="description">Deskripsi</Label>
+   767→              <Textarea
+   768→                id="description"
+   769→                value={form.description}
+   770→                onChange={(e) =>
+   771→                  setForm((prev) => ({ ...prev, description: e.target.value }))
+   772→                }
+   773→                placeholder="Deskripsi singkat video..."
+   774→                rows={3}
+   775→                className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground resize-none"
+   776→              />
+   777→            </div>
+   778→
+   779→            {/* Category */}
+   780→            <div className="space-y-2">
+   781→              <Label htmlFor="category">
+   782→                <span className="flex items-center gap-1.5">
+   783→                  <Tag className="w-3.5 h-3.5" />
+   784→                  Kategori *
+   785→                </span>
+   786→              </Label>
+   787→              <Input
+   788→                id="category"
+   789→                list="category-suggestions"
+   790→                value={form.category}
+   791→                onChange={(e) =>
+   792→                  setForm((prev) => ({ ...prev, category: e.target.value }))
+   793→                }
+   794→                placeholder="Ketik kategori baru atau pilih yang ada..."
+   795→                className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground"
+   796→                required
+   797→              />
+   798→              {existingCategories.length > 0 && (
+   799→                <datalist id="category-suggestions">
+   800→                  {existingCategories.map((cat) => (
+   801→                    <option key={cat} value={cat} />
+   802→                  ))}
+   803→                </datalist>
+   804→              )}
+   805→              <p className="text-xs text-muted-foreground">
+   806→                Ketik kategori bebas, contoh: Film, Musik, Komedi, Gaming, dll.
+   807→              </p>
+   808→            </div>
+   809→
+   810→            {/* ── Video Source Tabs: Upload File vs Embed URL ── */}
+   811→            <div className="space-y-3">
+   812→              <Label>Sumber Video *</Label>
+   813→              {/* Tab buttons */}
+   814→              <div className="flex gap-1 p-1 bg-white/5 rounded-lg">
+   815→                <button
+   816→                  type="button"
+   817→                  onClick={() => {
+   818→                    setVideoInputMode("upload");
+   819→                    setEmbedInfo(null);
+   820→                  }}
+   821→                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-md text-xs font-medium transition-all duration-200 ${
+   822→                    videoInputMode === "upload"
+   823→                      ? "bg-red-600 text-white shadow-sm"
+   824→                      : "text-muted-foreground hover:text-white hover:bg-white/5"
+   825→                  }`}
+   826→                >
+   827→                  <Upload className="w-3.5 h-3.5" />
+   828→                  Upload File
+   829→                </button>
+   830→                <button
+   831→                  type="button"
+   832→                  onClick={() => {
+   833→                    setVideoInputMode("embed");
+   834→                  }}
+   835→                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-md text-xs font-medium transition-all duration-200 ${
+   836→                    videoInputMode === "embed"
+   837→                      ? "bg-orange-500 text-white shadow-sm"
+   838→                      : "text-muted-foreground hover:text-white hover:bg-white/5"
+   839→                  }`}
+   840→                >
+   841→                  <Link2 className="w-3.5 h-3.5" />
+   842→                  Embed URL
+   843→                </button>
+   844→              </div>
+   845→
+   846→              {/* ── UPLOAD FILE TAB ── */}
+   847→              {videoInputMode === "upload" && (
+   848→                <div className="space-y-2">
+   849→                  {/* Video upload area with drag & drop */}
+   850→                  <div
+   851→                    className={`relative border-2 border-dashed rounded-lg transition-all duration-200 ${
+   852→                      videoDragOver
+   853→                        ? "border-red-500 bg-red-500/10"
+   854→                        : form.videoUrl && form.videoFile
+   855→                        ? "border-green-500/30 bg-green-500/5"
+   856→                        : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"
+   857→                    }`}
+   858→                    onDragOver={(e) => {
+   859→                      e.preventDefault();
+   860→                      e.stopPropagation();
+   861→                      setVideoDragOver(true);
+   862→                    }}
+   863→                    onDragLeave={(e) => {
+   864→                      e.preventDefault();
+   865→                      e.stopPropagation();
+   866→                      setVideoDragOver(false);
+   867→                    }}
+   868→                    onDrop={(e) => {
+   869→                      e.preventDefault();
+   870→                      e.stopPropagation();
+   871→                      setVideoDragOver(false);
+   872→                      const file = e.dataTransfer.files?.[0];
+   873→                      if (file) {
+   874→                        // Accept video files even if MIME type is empty (mobile compatibility)
+   875→                        const ext = file.name.split(".").pop()?.toLowerCase() || "";
+   876→                        const videoExts = ["mp4","m4v","3gp","3g2","webm","mov","avi","mkv","wmv","flv","mpeg","mpg","ts","mts","m2ts","ogv","f4v","dv"];
+   877→                        if (file.type.startsWith("video/") || videoExts.includes(ext)) {
+   878→                          handleVideoUpload(file);
+   879→                        } else {
+   880→                          toast.error("File harus berupa video (MP4, MOV, AVI, MKV, dll.)");
+   881→                        }
+   882→                      }
+   883→                    }}
+   884→                  >
+   885→                    <label className="block cursor-pointer">
+   886→                      <div className="flex flex-col items-center justify-center gap-2 px-4 py-5">
+   887→                        {uploadProgress.video ? (
+   888→                          <>
+   889→                            <Loader2 className="w-5 h-5 animate-spin text-red-400" />
+   890→                            <div className="w-full max-w-xs">
+   891→                              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+   892→                                <span>Mengupload {form.videoFile?.name}...</span>
+   893→                                <span>{uploadProgress.percent}%</span>
+   894→                              </div>
+   895→                              <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+   896→                                <motion.div
+   897→                                  className="h-full bg-gradient-to-r from-red-600 to-orange-500 rounded-full"
+   898→                                  initial={{ width: 0 }}
+   899→                                  animate={{ width: `${uploadProgress.percent}%` }}
+   900→                                  transition={{ duration: 0.3 }}
+   901→                                />
+   902→                              </div>
+   903→                            </div>
+   904→                          </>
+   905→                        ) : form.videoUrl && form.videoFile ? (
+   906→                          <>
+   907→                            <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
+   908→                              <Film className="w-4 h-4 text-green-400" />
+   909→                            </div>
+   910→                            <div className="text-center">
+   911→                              <p className="text-xs text-green-400 font-medium">{form.videoFile.name}</p>
+   912→                              <p className="text-xs text-muted-foreground">
+   913→                                {(form.videoFile.size / (1024 * 1024)).toFixed(1)} MB
+   914→                              </p>
+   915→                            </div>
+   916→                            <p className="text-xs text-muted-foreground/60">Klik atau seret untuk ganti file</p>
+   917→                          </>
+   918→                        ) : (
+   919→                          <>
+   920→                            <Upload className="w-5 h-5 text-muted-foreground" />
+   921→                            <p className="text-xs text-muted-foreground">
+   922→                              Seret video ke sini atau klik untuk memilih file
+   923→                            </p>
+   924→                            <p className="text-[10px] text-muted-foreground/50">
+   925→                              Semua format video — MP4, MOV, AVI, MKV, WMV, FLV, WebM, 3GP, MPEG, TS, dll. — maks 100MB
+   926→                            </p>
+   927→                          </>
+   928→                        )}
+   929→                      </div>
+   930→                      <input
+   931→                        ref={videoFileInputRef}
+   932→                        type="file"
+   933→                        accept="video/*,.mp4,.mov,.avi,.mkv,.wmv,.flv,.webm,.3gp,.3g2,.m4v,.mpeg,.mpg,.ts,.mts,.m2ts,.ogv,.f4v,.dv"
+   934→                        className="hidden"
+   935→                        onChange={(e) => {
+   936→                          const file = e.target.files?.[0];
+   937→                          if (file) {
+   938→                            handleVideoUpload(file);
+   939→                          }
+   940→                        }}
+   941→                      />
+   942→                    </label>
+   943→                  </div>
+   944→                  <p className="text-[10px] text-muted-foreground/40">
+   945→                    ⚡ Upload dari ponsel didukung — semua format video otomatis dikonversi Cloudinary
+   946→                  </p>
+   947→                </div>
+   948→              )}
+   949→
+   950→              {/* ── EMBED URL TAB ── */}
+   951→              {videoInputMode === "embed" && (
+   952→                <div className="space-y-3">
+   953→                  <div className="space-y-2">
+   954→                    <Label htmlFor="embedUrl" className="text-xs">URL Video / Embed</Label>
+   955→                    <Input
+   956→                      id="embedUrl"
+   957→                      value={form.embedUrl}
+   958→                      onChange={(e) => handleEmbedUrlChange(e.target.value)}
+   959→                      placeholder='Paste URL video atau paste langsung <iframe src="..."> — semua platform didukung'
+   960→                      className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground text-sm"
+   961→                    />
+   962→                  </div>
+   963→
+   964→                  {/* Embed provider detection */}
+   965→                  {embedInfo && (
+   966→                    <div className="space-y-2">
+   967→                      <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
+   968→                        <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
+   969→                        <span className="text-xs text-green-400">
+   970→                          Terdeteksi: <strong>{embedInfo.provider}</strong> — auto-convert ke embed URL
+   971→                        </span>
+   972→                      </div>
+   973→                      {/* Show the actual iframe src URL that will be used */}
+   974→                      <div className="px-3 py-2 bg-white/[0.03] border border-white/5 rounded-lg">
+   975→                        <p className="text-[10px] text-muted-foreground mb-1 font-medium">
+   976→                          iframe src yang akan digunakan:
+   977→                        </p>
+   978→                        <code className="block text-[10px] text-orange-400 break-all leading-relaxed">
+   979→                          {embedInfo.embedUrl}
+   980→                        </code>
+   981→                      </div>
+   982→                    </div>
+   983→                  )}
+   984→
+   985→                  {/* Free embed: any valid URL works */}
+   986→                  {form.embedUrl && isValidUrl(form.embedUrl) && !embedInfo && (
+   987→                    <div className="space-y-2">
+   988→                      <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
+   989→                        <Globe className="w-4 h-4 text-green-400 flex-shrink-0" />
+   990→                        <span className="text-xs text-green-400">
+   991→                          URL valid — akan langsung digunakan sebagai iframe src
+   992→                        </span>
+   993→                      </div>
+   994→                      <div className="px-3 py-2 bg-white/[0.03] border border-white/5 rounded-lg">
+   995→                        <p className="text-[10px] text-muted-foreground mb-1 font-medium">
+   996→                          iframe src yang akan digunakan:
+   997→                        </p>
+   998→                        <code className="block text-[10px] text-orange-400 break-all leading-relaxed">
+   999→                          {form.embedUrl}
+  1000→                        </code>
+  1001→                      </div>
+  1002→                    </div>
+  1003→                  )}
+  1004→
+  1005→                  {/* Invalid URL warning */}
+  1006→                  {form.embedUrl && !isValidUrl(form.embedUrl) && (
+  1007→                    <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg">
+  1008→                      <X className="w-4 h-4 text-red-400" />
+  1009→                      <span className="text-xs text-red-400">
+  1010→                        URL tidak valid. Pastikan URL dimulai dengan https://
+  1011→                      </span>
+  1012→                    </div>
+  1013→                  )}
+  1014→
+  1015→                  {/* Info box */}
+  1016→                  <div className="px-3 py-2 bg-white/[0.03] border border-white/5 rounded-lg">
+  1017→                    <p className="text-[10px] text-muted-foreground mb-1.5 font-medium">
+  1018→                      ✨ Semua platform didukung — paste URL video atau iframe embed
+  1019→                    </p>
+  1020→                    <div className="flex flex-wrap gap-1.5">
+  1021→                      {["YouTube", "Vimeo", "Dailymotion", "TikTok", "Facebook", "Instagram", "Bilibili", "NicoNico", "Lainnya"].map((p) => (
+  1022→                        <Badge key={p} variant="outline" className="text-[9px] px-1.5 py-0 border-white/10 text-muted-foreground">
+  1023→                          {p}
+  1024→                        </Badge>
+  1025→                      ))}
+  1026→                    </div>
+  1027→                  </div>
+  1028→                </div>
+  1029→              )}
+  1030→            </div>
+  1031→
+  1032→            {/* Thumbnail Upload */}
+  1033→            <div className="space-y-2">
+  1034→              <Label>Thumbnail (opsional — otomatis dari video/embed jika tidak diupload)</Label>
+  1035→              <div className="flex items-center gap-3">
+  1036→                {form.thumbnailUrl ? (
+  1037→                  <div className="relative w-24 h-14 rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
+  1038→                    <img
+  1039→                      src={form.thumbnailUrl}
+  1040→                      alt="Thumbnail"
+  1041→                      className="w-full h-full object-cover"
+  1042→                    />
+  1043→                    <button
+  1044→                      type="button"
+  1045→                      onClick={() =>
+  1046→                        setForm((prev) => ({
+  1047→                          ...prev,
+  1048→                          thumbnailUrl: "",
+  1049→                          thumbnailFile: null,
+  1050→                        }))
+  1051→                      }
+  1052→                      className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/80 flex items-center justify-center"
+  1053→                    >
+  1054→                      <X className="w-3 h-3" />
+  1055→                    </button>
+  1056→                  </div>
+  1057→                ) : null}
+  1058→                {/* Thumbnail upload with drag & drop */}
+  1059→                <div
+  1060→                  className={`border-2 border-dashed rounded-lg transition-all duration-200 ${
+  1061→                    thumbDragOver
+  1062→                      ? "border-red-500 bg-red-500/10"
+  1063→                      : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"
+  1064→                  }`}
+  1065→                  onDragOver={(e) => {
+  1066→                    e.preventDefault();
+  1067→                    e.stopPropagation();
+  1068→                    setThumbDragOver(true);
+  1069→                  }}
+  1070→                  onDragLeave={(e) => {
+  1071→                    e.preventDefault();
+  1072→                    e.stopPropagation();
+  1073→                    setThumbDragOver(false);
+  1074→                  }}
+  1075→                  onDrop={(e) => {
+  1076→                    e.preventDefault();
+  1077→                    e.stopPropagation();
+  1078→                    setThumbDragOver(false);
+  1079→                    const file = e.dataTransfer.files?.[0];
+  1080→                    if (file && file.type.startsWith("image/")) {
+  1081→                      setForm((prev) => ({ ...prev, thumbnailFile: file }));
+  1082→                    } else {
+  1083→                      toast.error("File harus berupa gambar");
+  1084→                    }
+  1085→                  }}
+  1086→                >
+  1087→                  <label className="block cursor-pointer">
+  1088→                    <div className="flex items-center justify-center gap-2 px-4 py-3">
+  1089→                      {uploadProgress.thumbnail ? (
+  1090→                        <Loader2 className="w-4 h-4 animate-spin text-red-400" />
+  1091→                      ) : (
+  1092→                        <ImageIcon className="w-4 h-4 text-muted-foreground" />
+  1093→                      )}
+  1094→                      <span className="text-xs text-muted-foreground">
+  1095→                        {form.thumbnailUrl ? "Ganti thumbnail" : "Upload thumbnail ke Cloudinary"}
+  1096→                      </span>
+  1097→                    </div>
+  1098→                    <input
+  1099→                      ref={fileInputRef}
+  1100→                      type="file"
+  1101→                      accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff,.avif,.svg"
+  1102→                      className="hidden"
+  1103→                      onChange={(e) => {
+  1104→                        const file = e.target.files?.[0];
+  1105→                        if (file) {
+  1106→                          setForm((prev) => ({ ...prev, thumbnailFile: file }));
+  1107→                        }
+  1108→                      }}
+  1109→                    />
+  1110→                  </label>
+  1111→                </div>
+  1112→              </div>
+  1113→            </div>
+  1114→
+  1115→            {/* Duration indicator */}
+  1116→            {form.duration && videoInputMode === "upload" && (
+  1117→              <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
+  1118→                <Clock className="w-4 h-4 text-green-400" />
+  1119→                <span className="text-sm text-green-400">
+  1120→                  Durasi terdeteksi otomatis: {form.duration}
+  1121→                </span>
+  1122→              </div>
+  1123→            )}
+  1124→
+  1125→            {/* Featured Toggle */}
+  1126→            <div className="flex items-center justify-between py-2">
+  1127→              <div className="flex items-center gap-2">
+  1128→                <Star className="w-4 h-4 text-yellow-500" />
+  1129→                <Label>Jadikan Video Unggulan (Featured)</Label>
+  1130→              </div>
+  1131→              <Switch
+  1132→                checked={form.isFeatured}
+  1133→                onCheckedChange={(checked) =>
+  1134→                  setForm((prev) => ({ ...prev, isFeatured: checked }))
+  1135→                }
+  1136→              />
+  1137→            </div>
+  1138→
+  1139→            {/* Submit */}
+  1140→            <div className="flex gap-3 pt-2">
+  1141→              <Button
+  1142→                type="button"
+  1143→                variant="ghost"
+  1144→                onClick={() => setIsFormOpen(false)}
+  1145→                className="text-muted-foreground hover:text-white"
+  1146→              >
+  1147→                Batal
+  1148→              </Button>
+  1149→              <Button
+  1150→                type="submit"
+  1151→                disabled={isSubmitDisabled}
+  1152→                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold gap-2"
+  1153→              >
+  1154→                {isUploading ? (
+  1155→                  <Loader2 className="w-4 h-4 animate-spin" />
+  1156→                ) : (
+  1157→                  <Upload className="w-4 h-4" />
+  1158→                )}
+  1159→                {editingVideo ? "Perbarui Video" : "Simpan Video"}
+  1160→              </Button>
+  1161→            </div>
+  1162→          </form>
+  1163→        </DialogContent>
+  1164→      </Dialog>
+  1165→    </div>
+  1166→  );
+  1167→}
+  1168→
+  1169→export default function AdminPage() {
+  1170→  return (
+  1171→    <AdminAuthGuard>
+  1172→      <AdminDashboard />
+  1173→    </AdminAuthGuard>
+  1174→  );
+  1175→}
+  1176→
