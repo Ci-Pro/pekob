@@ -194,6 +194,7 @@ function AdminDashboard() {
 
   const handleThumbnailUpload = async (file: File) => {
     setUploadProgress((prev) => ({ ...prev, thumbnail: true }));
+    toast.info("Mengupload thumbnail ke Cloudinary...");
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -202,12 +203,17 @@ function AdminDashboard() {
       const res = await fetch("/api/upload", { method: "POST", body: formData });
       const data = await res.json();
 
+      if (data.error) {
+        toast.error(data.error);
+        return;
+      }
+
       if (data.url) {
         setForm((prev) => ({ ...prev, thumbnailUrl: data.url, thumbnailFile: file }));
-        toast.success("Thumbnail berhasil diupload");
+        toast.success("Thumbnail berhasil diupload ke Cloudinary");
       }
     } catch {
-      toast.error("Gagal upload thumbnail");
+      toast.error("Gagal upload thumbnail ke Cloudinary");
     } finally {
       setUploadProgress((prev) => ({ ...prev, thumbnail: false }));
     }
@@ -216,12 +222,13 @@ function AdminDashboard() {
   const handleVideoUpload = async (file: File) => {
     setUploadProgress((prev) => ({ ...prev, video: true }));
     setDetectingDuration(true);
+    toast.info("Mengupload video ke Cloudinary...");
 
     try {
-      const duration = await detectVideoDuration(file);
-      if (duration) {
-        setForm((prev) => ({ ...prev, duration }));
-        toast.success(`Durasi terdeteksi: ${duration}`);
+      // Client-side duration detection as fallback
+      const clientDuration = await detectVideoDuration(file);
+      if (clientDuration) {
+        setForm((prev) => ({ ...prev, duration: clientDuration }));
       }
 
       const formData = new FormData();
@@ -231,12 +238,27 @@ function AdminDashboard() {
       const res = await fetch("/api/upload", { method: "POST", body: formData });
       const data = await res.json();
 
+      if (data.error) {
+        toast.error(data.error);
+        return;
+      }
+
       if (data.url) {
+        // Use Cloudinary duration if available, otherwise keep client-detected
+        if (data.duration && !clientDuration) {
+          const h = Math.floor(data.duration / 3600);
+          const m = Math.floor((data.duration % 3600) / 60);
+          const s = data.duration % 60;
+          const durStr = h > 0
+            ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+            : `${m}:${String(s).padStart(2, "0")}`;
+          setForm((prev) => ({ ...prev, duration: durStr }));
+        }
         setForm((prev) => ({ ...prev, videoUrl: data.url, videoFile: file }));
-        toast.success("Video berhasil diupload");
+        toast.success("Video berhasil diupload ke Cloudinary");
       }
     } catch {
-      toast.error("Gagal upload video");
+      toast.error("Gagal upload video ke Cloudinary");
     } finally {
       setUploadProgress((prev) => ({ ...prev, video: false }));
       setDetectingDuration(false);
@@ -585,7 +607,7 @@ function AdminDashboard() {
                       <ImageIcon className="w-4 h-4 text-muted-foreground" />
                     )}
                     <span className="text-xs text-muted-foreground">
-                      {form.thumbnailUrl ? "Ganti thumbnail" : "Upload thumbnail"}
+                      {form.thumbnailUrl ? "Ganti thumbnail" : "Upload thumbnail ke Cloudinary"}
                     </span>
                   </div>
                   <input
@@ -612,7 +634,7 @@ function AdminDashboard() {
                 onChange={(e) =>
                   setForm((prev) => ({ ...prev, videoUrl: e.target.value }))
                 }
-                placeholder="Upload file atau masukkan URL video"
+                placeholder="Upload file video atau masukkan URL YouTube/external"
                 className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground"
               />
               <label className="block cursor-pointer">
@@ -625,7 +647,7 @@ function AdminDashboard() {
                   <span className="text-xs text-muted-foreground">
                     {form.videoFile
                       ? form.videoFile.name
-                      : "Atau upload file video dari perangkat"}
+                      : "Upload file video ke Cloudinary (maks 100MB)"}
                   </span>
                 </div>
                 <input
