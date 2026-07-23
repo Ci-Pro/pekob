@@ -10,6 +10,8 @@ interface VideoStore {
   categories: string[];
   searchQuery: string;
   isLoading: boolean;
+  lastSyncVersion: number;
+
   setVideos: (videos: Video[]) => void;
   setFeaturedVideo: (video: Video | null) => void;
   playVideo: (video: Video) => void;
@@ -19,6 +21,7 @@ interface VideoStore {
   setSearchQuery: (query: string) => void;
   setLoading: (loading: boolean) => void;
   incrementView: (id: string) => void;
+  setLastSyncVersion: (version: number) => void;
 }
 
 export const useVideoStore = create<VideoStore>((set, get) => ({
@@ -30,6 +33,7 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
   categories: [],
   searchQuery: "",
   isLoading: true,
+  lastSyncVersion: -1,
 
   setVideos: (videos) => set({ videos }),
 
@@ -71,4 +75,6 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
       ),
     });
   },
+
+  setLastSyncVersion: (version) => set({ lastSyncVersion: version }),
 }));

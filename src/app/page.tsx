@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, Suspense } from "react";
+import { useEffect, useMemo, useRef, useCallback, Suspense } from "react";
 import { useVideoStore } from "@/store/video-store";
 import { Header } from "@/components/header";
 import { HeroSection } from "@/components/hero-section";
@@ -11,80 +11,124 @@ import { Footer } from "@/components/footer";
 import { VideoPlayerModal } from "@/components/video-player-modal";
 import { Sparkles } from "lucide-react";
 
+// Poll interval: 8 seconds
+const SYNC_INTERVAL_MS = 8000;
+
 function HomePage() {
   const {
     videos,
     featuredVideo,
     activeCategory,
     searchQuery,
+    lastSyncVersion,
     setVideos,
     setFeaturedVideo,
     setCategories,
     setLoading,
+    setLastSyncVersion,
     isLoading,
   } = useVideoStore();
 
-  // Fetch categories on mount
-  useEffect(() => {
-    async function fetchCategories() {
-      try {
-        const res = await fetch("/api/categories");
-        const data = await res.json();
-        setCategories(data.categories || []);
-      } catch {
-        console.error("Failed to fetch categories");
-      }
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isFirstSyncRef = useRef(true);
+
+  // Fetch categories
+  const fetchCategories = useCallback(async () => {
+    try {
+      const res = await fetch("/api/categories");
+      const data = await res.json();
+      setCategories(data.categories || []);
+    } catch {
+      console.error("Failed to fetch categories");
     }
-    fetchCategories();
   }, [setCategories]);
 
-  // Fetch videos when category or search changes
-  useEffect(() => {
-    async function fetchVideos() {
-      setLoading(true);
-      try {
-        const params = new URLSearchParams();
-        if (activeCategory)
-          params.set("category", activeCategory);
-        if (searchQuery) params.set("search", searchQuery);
+  // Fetch videos
+  const fetchVideos = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (activeCategory) params.set("category", activeCategory);
+      if (searchQuery) params.set("search", searchQuery);
 
-        const res = await fetch(`/api/videos?${params.toString()}`);
-        const data = await res.json();
-        setVideos(data.videos || []);
+      const res = await fetch(`/api/videos?${params.toString()}`);
+      const data = await res.json();
+      setVideos(data.videos || []);
 
-        // Refresh categories from latest data
-        const catRes = await fetch("/api/categories");
-        const catData = await catRes.json();
-        setCategories(catData.categories || []);
-      } catch (err) {
-        console.error("Failed to fetch videos:", err);
-      } finally {
-        setLoading(false);
-      }
+      // Refresh categories
+      await fetchCategories();
+    } catch (err) {
+      console.error("Failed to fetch videos:", err);
+    } finally {
+      setLoading(false);
     }
+  }, [activeCategory, searchQuery, setVideos, setCategories, setLoading, fetchCategories]);
+
+  // Fetch featured
+  const fetchFeatured = useCallback(async () => {
+    try {
+      const res = await fetch("/api/videos?featured=true&limit=1");
+      const data = await res.json();
+      if (data.videos && data.videos.length > 0) {
+        setFeaturedVideo(data.videos[0]);
+      }
+    } catch (err) {
+      console.error("Failed to fetch featured:", err);
+    }
+  }, [setFeaturedVideo]);
+
+  // Initial fetch: categories + videos + featured
+  useEffect(() => {
+    fetchCategories();
     fetchVideos();
-  }, [activeCategory, searchQuery, setVideos, setCategories, setLoading]);
-
-  // Fetch featured video
-  useEffect(() => {
-    async function fetchFeatured() {
-      try {
-        const res = await fetch("/api/videos?featured=true&limit=1");
-        const data = await res.json();
-        if (data.videos && data.videos.length > 0) {
-          setFeaturedVideo(data.videos[0]);
-        } else if (videos.length > 0) {
-          setFeaturedVideo(videos[0]);
-        }
-      } catch (err) {
-        console.error("Failed to fetch featured:", err);
-        if (videos.length > 0) {
-          setFeaturedVideo(videos[0]);
-        }
-      }
-    }
     fetchFeatured();
-  }, [videos, setFeaturedVideo]);
+    // Runs on mount only; fetchVideos re-triggers on category/search changes
+  }, []);
+
+  // Re-fetch when category or search changes
+  useEffect(() => {
+    fetchVideos();
+  }, [activeCategory, searchQuery, fetchVideos]);
+
+  // Re-fetch featured when videos change
+  useEffect(() => {
+    if (videos.length > 0 && !featuredVideo) {
+      fetchFeatured();
+    }
+  }, [videos, featuredVideo, fetchFeatured]);
+
+  // ── Real-time polling: check /api/sync every 8 seconds ──
+  useEffect(() => {
+    pollTimerRef.current = setInterval(async () => {
+      // Skip when tab is not visible
+      if (document.hidden) return;
+
+      try {
+        const res = await fetch("/api/sync");
+        const data = await res.json();
+
+        // First sync: just record the version, skip re-fetch
+        if (isFirstSyncRef.current) {
+          isFirstSyncRef.current = false;
+          setLastSyncVersion(data.version);
+          return;
+        }
+
+        // Version changed → admin made a change → re-fetch everything
+        if (data.version !== lastSyncVersion) {
+          setLastSyncVersion(data.version);
+          fetchVideos();
+          fetchFeatured();
+        }
+      } catch {
+        // Silently ignore sync errors (network hiccups, etc.)
+      }
+    }, SYNC_INTERVAL_MS);
+
+    return () => {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    };
+  }, [lastSyncVersion, setLastSyncVersion, fetchVideos, fetchFeatured]);
 
   const filteredVideos = useMemo(() => {
     return videos.filter((v) => v.id !== featuredVideo?.id);

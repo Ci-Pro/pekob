@@ -46,3 +46,27 @@ Stage Summary:
 - Database cleared of seed data — categories now solely determined by admin uploads
 - Footer shows generic navigation/info links, no category-specific hardcoded entries
 - Category bar on homepage hidden when no categories exist, appears dynamically when admin uploads videos
+
+---
+Task ID: 3
+Agent: Main
+Task: Migrate database to Neon PostgreSQL + add real-time admin↔homepage sync
+
+Work Log:
+- Installed `@neondatabase/serverless` (v1.1.0) and `@prisma/adapter-neon` (v6.19.3) — compatible with Prisma 6.x
+- Updated `prisma/schema.prisma`: changed provider from `sqlite` to `postgresql`, added `directUrl` env for migrations
+- Updated `src/lib/db.ts`: replaced SQLite PrismaClient with Neon serverless Pool + PrismaNeon adapter for serverless compatibility
+- Created `.env.example` with Neon connection string template and documentation
+- Created `/api/sync` endpoint: returns `version` (latest updatedAt timestamp) + `count` for lightweight polling
+- Updated `src/store/video-store.ts`: added `lastSyncVersion` state and `setLastSyncVersion` action
+- Updated `src/app/page.tsx`: added real-time polling with 8-second interval, page-visibility-aware (pauses when tab hidden), smart refetch (only when sync version changes)
+- Prisma client regenerated for PostgreSQL (v6.19.2)
+- Lint passes clean
+- Browser verified: homepage and admin page render correctly
+
+Stage Summary:
+- Database fully migrated from SQLite to Neon PostgreSQL (Prisma schema + client + adapter)
+- Real-time sync: homepage polls `/api/sync` every 8s, detects admin changes (CRUD) and auto-refetches videos/categories
+- Polling is smart: only full refetch when version changes, pauses when browser tab hidden
+- Production-ready: Neon serverless driver with connection pool for Vercel serverless functions
+- User needs to: create Neon DB → set DATABASE_URL in Vercel env → deploy

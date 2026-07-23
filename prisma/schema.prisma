@@ -3,20 +3,21 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 model Video {
-  id          String   @id @default(cuid())
-  title       String
-  description String?
-  category    String   @default("Umum")
-  videoUrl    String
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  category     String   @default("Umum")
+  videoUrl     String
   thumbnailUrl String
-  duration    String?
-  views       Int      @default(0)
-  isFeatured  Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  duration     String?
+  views        Int      @default(0)
+  isFeatured   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
