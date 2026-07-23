@@ -35,10 +35,73 @@ import {
   Clock,
   LogOut,
   ShieldCheck,
+  Link2,
+  Globe,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+
+// ── Embed URL detectors ──
+const EMBED_PROVIDERS: { name: string; pattern: RegExp; embedUrl: (id: string) => string }[] = [
+  {
+    name: "YouTube",
+    pattern: /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+    embedUrl: (id) => `https://www.youtube.com/embed/${id}?autoplay=1&rel=0`,
+  },
+  {
+    name: "Vimeo",
+    pattern: /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(?:video\/)?(\d+)/,
+    embedUrl: (id) => `https://player.vimeo.com/video/${id}?autoplay=1`,
+  },
+  {
+    name: "Dailymotion",
+    pattern: /(?:https?:\/\/)?(?:www\.)?dailymotion\.com\/video\/([a-zA-Z0-9]+)/,
+    embedUrl: (id) => `https://www.dailymotion.com/embed/video/${id}?autoplay=1`,
+  },
+  {
+    name: "TikTok",
+    pattern: /(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@[^/]+\/video\/(\d+)/,
+    embedUrl: (id) => `https://www.tiktok.com/embed/v2/${id}`,
+  },
+  {
+    name: "Facebook",
+    pattern: /(?:https?:\/\/)?(?:www\.)?facebook\.com\/.*\/videos\/(\d+)/,
+    embedUrl: (id) => `https://www.facebook.com/plugins/video.php?href=https://www.facebook.com/watch/?v=${id}&autoplay=true`,
+  },
+  {
+    name: "Instagram",
+    pattern: /(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:p|reel)\/([a-zA-Z0-9_-]+)/,
+    embedUrl: (id) => `https://www.instagram.com/p/${id}/embed/`,
+  },
+];
+
+type EmbedInfo = { provider: string; id: string; embedUrl: string } | null;
+
+function detectEmbedUrl(url: string): EmbedInfo {
+  if (!url) return null;
+  for (const provider of EMBED_PROVIDERS) {
+    const match = url.match(provider.pattern);
+    if (match && match[1]) {
+      return {
+        provider: provider.name,
+        id: match[1],
+        embedUrl: provider.embedUrl(match[1]),
+      };
+    }
+  }
+  return null;
+}
+
+function isValidUrl(str: string): boolean {
+  try {
+    new URL(str);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function AdminAuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -109,6 +172,8 @@ function detectVideoDuration(file: File): Promise<string | null> {
   });
 }
 
+type VideoInputMode = "upload" | "embed";
+
 function AdminDashboard() {
   const router = useRouter();
   const [videos, setVideos] = useState<Video[]>([]);
@@ -130,12 +195,19 @@ function AdminDashboard() {
     description: "",
     category: "",
     videoUrl: "",
+    videoSource: "upload" as "upload" | "embed",
+    embedUrl: "",
     thumbnailUrl: "",
     thumbnailFile: null as File | null,
     videoFile: null as File | null,
     duration: "" as string | null,
     isFeatured: false,
   });
+
+  // Video input mode (upload file or embed URL)
+  const [videoInputMode, setVideoInputMode] = useState<VideoInputMode>("upload");
+  // Embed info detected from URL
+  const [embedInfo, setEmbedInfo] = useState<EmbedInfo>(null);
 
   // Existing categories for suggestions
   const existingCategories = [...new Set(videos.map((v) => v.category))].sort();
@@ -163,6 +235,8 @@ function AdminDashboard() {
       description: "",
       category: "",
       videoUrl: "",
+      videoSource: "upload",
+      embedUrl: "",
       thumbnailUrl: "",
       thumbnailFile: null,
       videoFile: null,
@@ -172,6 +246,8 @@ function AdminDashboard() {
     setEditingVideo(null);
     setUploadProgress({ thumbnail: false, video: false, percent: 0 });
     setDetectingDuration(false);
+    setVideoInputMode("upload");
+    setEmbedInfo(null);
   };
 
   const openCreate = () => {
@@ -180,11 +256,15 @@ function AdminDashboard() {
   };
 
   const openEdit = (video: Video) => {
+    const isEmbed = video.videoSource === "embed" || detectEmbedUrl(video.videoUrl) !== null;
+    const embed = detectEmbedUrl(video.videoUrl);
     setForm({
       title: video.title,
       description: video.description || "",
       category: video.category,
       videoUrl: video.videoUrl,
+      videoSource: video.videoSource || (isEmbed ? "embed" : "upload"),
+      embedUrl: isEmbed ? video.videoUrl : "",
       thumbnailUrl: video.thumbnailUrl,
       thumbnailFile: null,
       videoFile: null,
@@ -192,6 +272,8 @@ function AdminDashboard() {
       isFeatured: video.isFeatured,
     });
     setEditingVideo(video);
+    setVideoInputMode(isEmbed ? "embed" : "upload");
+    setEmbedInfo(embed);
     setIsFormOpen(true);
   };
 
@@ -243,7 +325,7 @@ function AdminDashboard() {
         const xhr = new XMLHttpRequest();
 
         xhr.upload.addEventListener("progress", (e) => {
- if (e.lengthComputable) {
+          if (e.lengthComputable) {
             const pct = Math.round((e.loaded / e.total) * 100);
             setUploadProgress((prev) => ({ ...prev, percent: pct }));
           }
@@ -286,23 +368,55 @@ function AdminDashboard() {
     }
   };
 
+  // Handle embed URL input change
+  const handleEmbedUrlChange = (url: string) => {
+    setForm((prev) => ({ ...prev, embedUrl: url }));
+    const info = detectEmbedUrl(url);
+    setEmbedInfo(info);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsUploading(true);
 
     try {
-      if (form.thumbnailFile) {
-        await handleThumbnailUpload(form.thumbnailFile);
+      // If upload mode: upload files first
+      if (videoInputMode === "upload") {
+        if (form.thumbnailFile) {
+          await handleThumbnailUpload(form.thumbnailFile);
+        }
+        if (form.videoFile) {
+          await handleVideoUpload(form.videoFile);
+        }
       }
-      if (form.videoFile) {
-        await handleVideoUpload(form.videoFile);
+
+      // Build the payload
+      let finalVideoUrl = form.videoUrl;
+      let finalVideoSource = "upload";
+
+      if (videoInputMode === "embed" && form.embedUrl) {
+        finalVideoUrl = form.embedUrl;
+        finalVideoSource = "embed";
+        // Auto-generate thumbnail from embed if no thumbnail set
+        if (!form.thumbnailUrl) {
+          // Try to get YouTube thumbnail
+          const ytMatch = form.embedUrl.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+          if (ytMatch) {
+            finalVideoUrl = `https://www.youtube.com/watch?v=${ytMatch[1]}`;
+            setForm((prev) => ({
+              ...prev,
+              thumbnailUrl: `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`,
+            }));
+          }
+        }
       }
 
       const payload = {
         title: form.title,
         description: form.description,
         category: form.category,
-        videoUrl: form.videoUrl,
+        videoUrl: finalVideoUrl,
+        videoSource: finalVideoSource,
         thumbnailUrl: form.thumbnailUrl || null,
         duration: form.duration,
         isFeatured: form.isFeatured,
@@ -318,6 +432,9 @@ function AdminDashboard() {
           toast.success("Video berhasil diperbarui");
           setIsFormOpen(false);
           fetchVideos();
+        } else {
+          const err = await res.json();
+          toast.error(err.error || "Gagal memperbarui video");
         }
       } else {
         const res = await fetch("/api/videos", {
@@ -330,6 +447,9 @@ function AdminDashboard() {
           setIsFormOpen(false);
           resetForm();
           fetchVideos();
+        } else {
+          const err = await res.json();
+          toast.error(err.error || "Gagal menambahkan video");
         }
       }
     } catch {
@@ -361,6 +481,11 @@ function AdminDashboard() {
     (v) =>
       v.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       v.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Determine if the submit button should be disabled
+  const isSubmitDisabled = isUploading || !form.title || !form.category || (
+    videoInputMode === "upload" ? !form.videoUrl : !form.embedUrl
   );
 
   return (
@@ -415,7 +540,7 @@ function AdminDashboard() {
             className="bg-red-600 hover:bg-red-700 text-white font-semibold gap-2 self-start"
           >
             <Plus className="w-4 h-4" />
-            Unggah Video Baru
+            Tambah Video
           </Button>
         </div>
 
@@ -485,6 +610,12 @@ function AdminDashboard() {
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                         {video.category || "Tanpa kategori"}
                       </Badge>
+                      {video.videoSource === "embed" && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-500/30 text-orange-400">
+                          <Globe className="w-2.5 h-2.5 mr-0.5" />
+                          Embed
+                        </Badge>
+                      )}
                       <span className="flex items-center gap-1">
                         <Eye className="w-3 h-3" />
                         {video.views.toLocaleString("id-ID")}
@@ -522,7 +653,7 @@ function AdminDashboard() {
               <p className="text-muted-foreground text-sm">
                 {searchQuery
                   ? "Tidak ada video yang cocok"
-                  : "Belum ada video. Unggah video pertama!"}
+                  : "Belum ada video. Tambahkan video pertama!"}
               </p>
             </div>
           )}
@@ -534,7 +665,7 @@ function AdminDashboard() {
         <DialogContent className="max-w-lg bg-[#111] border-white/10 text-white max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold">
-              {editingVideo ? "Edit Video" : "Unggah Video Baru"}
+              {editingVideo ? "Edit Video" : "Tambah Video Baru"}
             </DialogTitle>
           </DialogHeader>
 
@@ -600,9 +731,208 @@ function AdminDashboard() {
               </p>
             </div>
 
+            {/* ── Video Source Tabs: Upload File vs Embed URL ── */}
+            <div className="space-y-3">
+              <Label>Sumber Video *</Label>
+              {/* Tab buttons */}
+              <div className="flex gap-1 p-1 bg-white/5 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVideoInputMode("upload");
+                    setEmbedInfo(null);
+                  }}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-md text-xs font-medium transition-all duration-200 ${
+                    videoInputMode === "upload"
+                      ? "bg-red-600 text-white shadow-sm"
+                      : "text-muted-foreground hover:text-white hover:bg-white/5"
+                  }`}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Upload File
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVideoInputMode("embed");
+                  }}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-md text-xs font-medium transition-all duration-200 ${
+                    videoInputMode === "embed"
+                      ? "bg-orange-500 text-white shadow-sm"
+                      : "text-muted-foreground hover:text-white hover:bg-white/5"
+                  }`}
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                  Embed URL
+                </button>
+              </div>
+
+              {/* ── UPLOAD FILE TAB ── */}
+              {videoInputMode === "upload" && (
+                <div className="space-y-2">
+                  {/* Video upload area with drag & drop */}
+                  <div
+                    className={`relative border-2 border-dashed rounded-lg transition-all duration-200 ${
+                      videoDragOver
+                        ? "border-red-500 bg-red-500/10"
+                        : form.videoUrl && form.videoFile
+                        ? "border-green-500/30 bg-green-500/5"
+                        : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"
+                    }`}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setVideoDragOver(true);
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setVideoDragOver(false);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setVideoDragOver(false);
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) {
+                        // Accept video files even if MIME type is empty (mobile compatibility)
+                        const ext = file.name.split(".").pop()?.toLowerCase() || "";
+                        const videoExts = ["mp4","m4v","3gp","3g2","webm","mov","avi","mkv","wmv","flv","mpeg","mpg","ts","mts","m2ts","ogv","f4v","dv"];
+                        if (file.type.startsWith("video/") || videoExts.includes(ext)) {
+                          handleVideoUpload(file);
+                        } else {
+                          toast.error("File harus berupa video (MP4, MOV, AVI, MKV, dll.)");
+                        }
+                      }
+                    }}
+                  >
+                    <label className="block cursor-pointer">
+                      <div className="flex flex-col items-center justify-center gap-2 px-4 py-5">
+                        {uploadProgress.video ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin text-red-400" />
+                            <div className="w-full max-w-xs">
+                              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                                <span>Mengupload {form.videoFile?.name}...</span>
+                                <span>{uploadProgress.percent}%</span>
+                              </div>
+                              <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                <motion.div
+                                  className="h-full bg-gradient-to-r from-red-600 to-orange-500 rounded-full"
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${uploadProgress.percent}%` }}
+                                  transition={{ duration: 0.3 }}
+                                />
+                              </div>
+                            </div>
+                          </>
+                        ) : form.videoUrl && form.videoFile ? (
+                          <>
+                            <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
+                              <Film className="w-4 h-4 text-green-400" />
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-green-400 font-medium">{form.videoFile.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {(form.videoFile.size / (1024 * 1024)).toFixed(1)} MB
+                              </p>
+                            </div>
+                            <p className="text-xs text-muted-foreground/60">Klik atau seret untuk ganti file</p>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-5 h-5 text-muted-foreground" />
+                            <p className="text-xs text-muted-foreground">
+                              Seret video ke sini atau klik untuk memilih file
+                            </p>
+                            <p className="text-[10px] text-muted-foreground/50">
+                              Semua format video — MP4, MOV, AVI, MKV, WMV, FLV, WebM, 3GP, MPEG, TS, dll. — maks 100MB
+                            </p>
+                          </>
+                        )}
+                      </div>
+                      <input
+                        ref={videoFileInputRef}
+                        type="file"
+                        accept="video/*,.mp4,.mov,.avi,.mkv,.wmv,.flv,.webm,.3gp,.3g2,.m4v,.mpeg,.mpg,.ts,.mts,.m2ts,.ogv,.f4v,.dv"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            handleVideoUpload(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/40">
+                    ⚡ Upload dari ponsel didukung — semua format video otomatis dikonversi Cloudinary
+                  </p>
+                </div>
+              )}
+
+              {/* ── EMBED URL TAB ── */}
+              {videoInputMode === "embed" && (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="embedUrl" className="text-xs">URL Video / Embed</Label>
+                    <Input
+                      id="embedUrl"
+                      value={form.embedUrl}
+                      onChange={(e) => handleEmbedUrlChange(e.target.value)}
+                      placeholder="https://www.youtube.com/watch?v=...  atau  https://vimeo.com/..."
+                      className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground text-sm"
+                    />
+                  </div>
+
+                  {/* Embed provider detection */}
+                  {embedInfo && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
+                      <Check className="w-4 h-4 text-green-400" />
+                      <span className="text-xs text-green-400">
+                        Terdeteksi: <strong>{embedInfo.provider}</strong> — ID: {embedInfo.id}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Unsupported URL warning */}
+                  {form.embedUrl && isValidUrl(form.embedUrl) && !embedInfo && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                      <Globe className="w-4 h-4 text-yellow-400" />
+                      <span className="text-xs text-yellow-400">
+                        URL tidak dikenali. Video akan dicoba langsung dimuat sebagai iframe.
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Invalid URL warning */}
+                  {form.embedUrl && !isValidUrl(form.embedUrl) && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg">
+                      <X className="w-4 h-4 text-red-400" />
+                      <span className="text-xs text-red-400">
+                        URL tidak valid. Pastikan URL dimulai dengan https://
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Supported providers info */}
+                  <div className="px-3 py-2 bg-white/[0.03] border border-white/5 rounded-lg">
+                    <p className="text-[10px] text-muted-foreground mb-1.5 font-medium">Platform yang didukung:</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {["YouTube", "Vimeo", "Dailymotion", "TikTok", "Facebook", "Instagram"].map((p) => (
+                        <Badge key={p} variant="outline" className="text-[9px] px-1.5 py-0 border-white/10 text-muted-foreground">
+                          {p}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Thumbnail Upload */}
             <div className="space-y-2">
-              <Label>Thumbnail (opsional)</Label>
+              <Label>Thumbnail {(videoInputMode === "embed" && embedInfo?.provider === "YouTube") ? "(otomatis dari YouTube)" : "(opsional)"}</Label>
               <div className="flex items-center gap-3">
                 {form.thumbnailUrl ? (
                   <div className="relative w-24 h-14 rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
@@ -635,11 +965,17 @@ function AdminDashboard() {
                   }`}
                   onDragOver={(e) => {
                     e.preventDefault();
+                    e.stopPropagation();
                     setThumbDragOver(true);
                   }}
-                  onDragLeave={() => setThumbDragOver(false)}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setThumbDragOver(false);
+                  }}
                   onDrop={(e) => {
                     e.preventDefault();
+                    e.stopPropagation();
                     setThumbDragOver(false);
                     const file = e.dataTransfer.files?.[0];
                     if (file && file.type.startsWith("image/")) {
@@ -677,103 +1013,8 @@ function AdminDashboard() {
               </div>
             </div>
 
-            {/* Video Upload or URL */}
-            <div className="space-y-2">
-              <Label>Video (File atau URL) *</Label>
-              <Input
-                value={form.videoUrl}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, videoUrl: e.target.value }))
-                }
-                placeholder="Upload file video atau masukkan URL YouTube/external"
-                className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground"
-              />
-              {/* Video upload area with drag & drop */}
-              <div
-                className={`relative border-2 border-dashed rounded-lg transition-all duration-200 ${
-                  videoDragOver
-                    ? "border-red-500 bg-red-500/10"
-                    : form.videoUrl && form.videoFile
-                    ? "border-green-500/30 bg-green-500/5"
-                    : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"
-                }`}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setVideoDragOver(true);
-                }}
-                onDragLeave={() => setVideoDragOver(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setVideoDragOver(false);
-                  const file = e.dataTransfer.files?.[0];
-                  if (file && file.type.startsWith("video/")) {
-                    handleVideoUpload(file);
-                  } else {
-                    toast.error("File harus berupa video");
-                  }
-                }}
-              >
-                <label className="block cursor-pointer">
-                  <div className="flex flex-col items-center justify-center gap-2 px-4 py-5">
-                    {uploadProgress.video ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin text-red-400" />
-                        <div className="w-full max-w-xs">
-                          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                            <span>Mengupload {form.videoFile?.name}...</span>
-                            <span>{uploadProgress.percent}%</span>
-                          </div>
-                          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                            <motion.div
-                              className="h-full bg-gradient-to-r from-red-600 to-orange-500 rounded-full"
-                              initial={{ width: 0 }}
-                              animate={{ width: `${uploadProgress.percent}%` }}
-                              transition={{ duration: 0.3 }}
-                            />
-                          </div>
-                        </div>
-                      </>
-                    ) : form.videoUrl && form.videoFile ? (
-                      <>
-                        <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
-                          <Film className="w-4 h-4 text-green-400" />
-                        </div>
-                        <div className="text-center">
-                          <p className="text-xs text-green-400 font-medium">{form.videoFile.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {(form.videoFile.size / (1024 * 1024)).toFixed(1)} MB
-                          </p>
-                        </div>
-                        <p className="text-xs text-muted-foreground/60">Klik atau seret untuk ganti file</p>
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="w-5 h-5 text-muted-foreground" />
-                        <p className="text-xs text-muted-foreground">
-                          Seret video ke sini atau klik untuk memilih file
-                        </p>
-                        <p className="text-[10px] text-muted-foreground/50">
-                          MP4, MOV, AVI, MKV, WMV, FLV, WebM, 3GP, MPEG, TS, M4V, OGG — maks 100MB
-                        </p>
-                      </>
-                    )}
-                  </div>
-                  <input
-                    ref={videoFileInputRef}
-                    type="file"
-                    accept="video/*,.mp4,.mov,.avi,.mkv,.wmv,.flv,.webm,.3gp,.3g2,.m4v,.mpeg,.mpg,.ts,.mts,.ogv,.f4v,.dv"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleVideoUpload(file);
-                    }}
-                  />
-                </label>
-              </div>
-            </div>
-
             {/* Duration indicator */}
-            {form.duration && (
+            {form.duration && videoInputMode === "upload" && (
               <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
                 <Clock className="w-4 h-4 text-green-400" />
                 <span className="text-sm text-green-400">
@@ -808,7 +1049,7 @@ function AdminDashboard() {
               </Button>
               <Button
                 type="submit"
-                disabled={isUploading || !form.title || !form.videoUrl || !form.category}
+                disabled={isSubmitDisabled}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold gap-2"
               >
                 {isUploading ? (
@@ -816,7 +1057,7 @@ function AdminDashboard() {
                 ) : (
                   <Upload className="w-4 h-4" />
                 )}
-                {editingVideo ? "Perbarui Video" : "Unggah Video"}
+                {editingVideo ? "Perbarui Video" : "Simpan Video"}
               </Button>
             </div>
           </form>

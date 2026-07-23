@@ -28,7 +28,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, description, category, videoUrl, thumbnailUrl, duration, isFeatured } = body;
+    const { title, description, category, videoUrl, videoSource, thumbnailUrl, duration, isFeatured } = body;
 
     const video = await db.video.update({
       where: { id },
@@ -37,6 +37,7 @@ export async function PUT(
         ...(description !== undefined && { description }),
         ...(category && { category }),
         ...(videoUrl && { videoUrl }),
+        ...(videoSource && { videoSource }),
         ...(thumbnailUrl && { thumbnailUrl }),
         ...(duration !== undefined && { duration }),
         ...(isFeatured !== undefined && { isFeatured }),

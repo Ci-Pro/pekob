@@ -1,73 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
 import cloudinary from "@/lib/cloudinary";
 
-// Supported video MIME types — covers virtually all common formats
-const SUPPORTED_VIDEO_TYPES = [
-  // MP4 variants
-  "video/mp4",
-  "video/x-m4v",
-  "video/3gpp",        // 3GP
-  "video/3gpp2",       // 3G2
-  // WebM
-  "video/webm",
-  "video/x-webm",
-  // MOV / QuickTime
-  "video/quicktime",
-  // AVI
-  "video/x-msvideo",
-  "video/avi",
-  // MKV / Matroska
-  "video/x-matroska",
-  "video/mkv",
-  // WMV
-  "video/x-ms-wmv",
-  "video/x-ms-asf",
-  // FLV
-  "video/x-flv",
-  // MPEG
-  "video/mpeg",
-  "video/mpg",
-  "video/x-mpeg",
-  // TS (MPEG Transport Stream)
-  "video/mp2t",
-  "video/MP2T",
-  // OGG
-  "video/ogg",
-  // F4V
-  "video/x-f4v",
-  // ProRes / MOV (professional)
-  "video/avc",
-  "video/H264",
-  "video/H265",
-  // DV
-  "video/dv",
-  // SWF (legacy)
-  "application/x-shockwave-flash",
-];
+// Supported video extensions (used when MIME type is empty/unrecognized — common on mobile)
+const VIDEO_EXTENSIONS = new Set([
+  "mp4", "m4v", "3gp", "3g2", "webm", "mov", "avi", "mkv", "wmv",
+  "flv", "mpeg", "mpg", "ts", "mts", "m2ts", "ogv", "f4v", "dv",
+  "hevc", "h265", "h264", "prores",
+]);
 
-// Supported image MIME types for thumbnails
-const SUPPORTED_IMAGE_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "image/bmp",
-  "image/tiff",
-  "image/svg+xml",
-  "image/avif",
-];
+// Supported image extensions
+const IMAGE_EXTENSIONS = new Set([
+  "jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif", "avif", "svg",
+]);
 
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;  // 10MB
 
-function isVideoSupported(mimeType: string): boolean {
-  return SUPPORTED_VIDEO_TYPES.some((t) =>
-    mimeType.toLowerCase().includes(t.split("/")[1]?.toLowerCase() || "")
-  );
+function getFileExtension(filename: string): string {
+  return (filename.split(".").pop() || "").toLowerCase();
 }
 
-function isImageSupported(mimeType: string): boolean {
-  return SUPPORTED_IMAGE_TYPES.includes(mimeType);
+function isVideoFile(file: File): boolean {
+  // 1. Check MIME type starts with "video/"
+  if (file.type && file.type.startsWith("video/")) return true;
+
+  // 2. Check well-known non-video/* MIME types that are actually video
+  const EXTRA_VIDEO_MIMES = [
+    "application/x-mpeg",
+    "application/octet-stream",
+    "application/mp4",
+    "application/x-shockwave-flash",
+  ];
+  if (file.type && EXTRA_VIDEO_MIMES.includes(file.type)) return true;
+
+  // 3. Fallback: check file extension (critical for mobile where file.type is often empty "")
+  const ext = getFileExtension(file.name);
+  return VIDEO_EXTENSIONS.has(ext);
+}
+
+function isImageFile(file: File): boolean {
+  if (file.type && file.type.startsWith("image/")) return true;
+  const ext = getFileExtension(file.name);
+  return IMAGE_EXTENSIONS.has(ext);
 }
 
 export async function POST(request: NextRequest) {
@@ -105,21 +79,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate MIME type
+    // Validate file type — robust check that works on mobile
     if (type === "video") {
-      if (!isVideoSupported(file.type) && !file.name.match(/\.(mp4|mov|avi|mkv|wmv|flv|webm|3gp|3g2|m4v|mpeg|mpg|ts|mts|m2ts|ogv|f4v|dv|prores|hevc|h265|h264)$/i)) {
+      if (!isVideoFile(file)) {
+        const ext = getFileExtension(file.name);
         return NextResponse.json(
           {
-            error: `Format video "${file.type || file.name.split(".").pop()}" tidak didukung. Format yang didukung: MP4, MOV, AVI, MKV, WMV, FLV, WebM, 3GP, MPEG, TS, M4V, OGG, DV, dan lainnya.`,
+            error: `Format file "${file.type || ext || "unknown"}" tidak didukung sebagai video. Gunakan: MP4, MOV, AVI, MKV, WMV, FLV, WebM, 3GP, MPEG, TS, M4V, OGG, dll.`,
           },
           { status: 400 }
         );
       }
     } else {
-      if (!isImageSupported(file.type)) {
+      if (!isImageFile(file)) {
         return NextResponse.json(
           {
-            error: `Format gambar "${file.type || file.name.split(".").pop()}" tidak didukung. Gunakan: JPEG, PNG, GIF, WebP, BMP, TIFF, AVIF, atau SVG.`,
+            error: `Format file "${file.type || getFileExtension(file.name) || "unknown"}" tidak didukung sebagai gambar. Gunakan: JPEG, PNG, GIF, WebP, BMP, TIFF, AVIF, atau SVG.`,
           },
           { status: 400 }
         );
@@ -148,6 +123,7 @@ export async function POST(request: NextRequest) {
     const resourceType = type === "video" ? "video" : "image";
 
     // Upload to Cloudinary using upload_stream
+    // upload_stream handles chunking internally and supports all video formats
     const uploadResult = await new Promise<{
       secure_url: string;
       public_id: string;
@@ -160,14 +136,7 @@ export async function POST(request: NextRequest) {
       const uploadOptions: Record<string, unknown> = {
         resource_type: resourceType,
         public_id: publicId,
-        // Let Cloudinary auto-detect format from file content
-        // This ensures ALL video formats get properly processed
       };
-
-      // Add chunk_size for large video uploads (6MB chunks)
-      if (type === "video" && buffer.length > 6_000_000) {
-        uploadOptions.chunk_size = 6_000_000;
-      }
 
       const uploadStream = cloudinary.uploader.upload_stream(
         uploadOptions,
@@ -186,7 +155,9 @@ export async function POST(request: NextRequest) {
         reject(err);
       });
 
-      uploadStream.end(buffer);
+      // Write buffer to stream
+      uploadStream.write(buffer);
+      uploadStream.end();
     });
 
     // Extract duration from Cloudinary response
@@ -195,12 +166,8 @@ export async function POST(request: NextRequest) {
       duration = Math.round(uploadResult.duration);
     }
 
-    // For videos, construct a universal playback URL
-    // Cloudinary auto-converts to web-playable format (mp4/webm)
-    let playbackUrl = uploadResult.secure_url;
-
     return NextResponse.json({
-      url: playbackUrl,
+      url: uploadResult.secure_url,
       publicId: uploadResult.public_id,
       name: file.name,
       originalType: file.type,
@@ -210,7 +177,7 @@ export async function POST(request: NextRequest) {
       resourceType: uploadResult.resource_type,
     });
   } catch (error) {
-    console.error("[Cloudinary] Upload error:", error);
+    console.error("[Upload] Error:", error);
     const message =
       error instanceof Error
         ? error.message

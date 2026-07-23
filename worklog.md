@@ -279,3 +279,46 @@ Stage Summary:
 - Upload UI: drag & drop + progress bar + auto-upload on select
 - /api/upload route created with proper validation, chunked upload, and error handling
 - Admin panel shows real-time progress with percentage during upload
+
+---
+Task ID: 9
+Agent: Main
+Task: Fix video upload bug (mobile compatibility) + implement embed video support
+
+Work Log:
+- Analyzed existing upload route: found `isVideoSupported()` uses substring MIME matching which fails on mobile when `file.type` is empty
+- Analyzed admin form: video upload and embed URL conflated in single input, confusing UX
+- Added `videoSource` field to Prisma schema (values: "upload" or "embed")
+- Pushed schema to Neon PostgreSQL database via `bun run db:push`
+- Rewrote `/api/upload/route.ts`:
+  - Replaced strict MIME type checking with robust `isVideoFile()` function
+  - Checks: `video/*` MIME prefix → known non-standard video MIMEs → file extension fallback
+  - Extension fallback covers: mp4, m4v, 3gp, 3g2, webm, mov, avi, mkv, wmv, flv, mpeg, mpg, ts, mts, m2ts, ogv, f4v, dv, hevc, h265, h264, prores
+  - Uses `upload_stream` with proper `.write(buffer).end()` pattern
+  - Same fix applied to image validation with `isImageFile()`
+- Updated `src/types/video.ts` — added `videoSource` field
+- Updated `/api/videos/route.ts` — POST handler includes `videoSource`
+- Updated `/api/videos/[id]/route.ts` — PUT handler includes `videoSource`
+- Rewrote `/app/admin/page.tsx`:
+  - Added tab-based UI: "Upload File" vs "Embed URL" with visual toggle
+  - Embed tab supports: YouTube, Vimeo, Dailymotion, TikTok, Facebook, Instagram
+  - URL auto-detection with provider name, ID, and embed URL preview
+  - YouTube thumbnail auto-generation when embedding
+  - Drag & drop with extension-based validation (not MIME-based) for mobile compat
+  - "Embed" badge on video list items with `videoSource === "embed"`
+- Rewrote `/components/video-player-modal.tsx`:
+  - Multi-provider embed support: YouTube, Vimeo, Dailymotion, TikTok, Facebook, Instagram
+  - Legacy YouTube URL auto-detection (for videos saved before videoSource field existed)
+  - `playsInline` attribute on `<video>` tag for mobile inline playback
+  - "Embed" badge shown on embedded video info
+- ESLint: 0 errors
+- `next build`: all 12 routes compile successfully
+- POST to `/api/upload` verified: file validation passes, Cloudinary check works
+
+Stage Summary:
+- Mobile video upload fixed: robust extension-based fallback when MIME type is empty
+- Embed video support added: YouTube, Vimeo, Dailymotion, TikTok, Facebook, Instagram
+- Admin form redesigned with clear tabs: Upload File | Embed URL
+- DB schema updated with `videoSource` field
+- All API routes updated to handle new field
+- Video player enhanced with multi-provider embed rendering

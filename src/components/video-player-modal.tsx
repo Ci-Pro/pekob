@@ -6,12 +6,74 @@ import {
   DialogContent,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { X, Share2, Heart, Eye, Clock, Film } from "lucide-react";
+import { X, Share2, Heart, Eye, Clock, Film, Globe } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import type { Video } from "@/types/video";
+
+// ── Embed providers configuration ──
+const EMBED_PROVIDERS = [
+  {
+    name: "YouTube",
+    test: (url: string) =>
+      /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)/.test(url),
+    embed: (url: string) => {
+      const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|shorts\/))([a-zA-Z0-9_-]{11})/);
+      return m ? `https://www.youtube.com/embed/${m[1]}?autoplay=1&rel=0` : null;
+    },
+  },
+  {
+    name: "Vimeo",
+    test: (url: string) => /vimeo\.com/.test(url),
+    embed: (url: string) => {
+      const m = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+      return m ? `https://player.vimeo.com/video/${m[1]}?autoplay=1` : null;
+    },
+  },
+  {
+    name: "Dailymotion",
+    test: (url: string) => /dailymotion\.com\/video/.test(url),
+    embed: (url: string) => {
+      const m = url.match(/dailymotion\.com\/video\/([a-zA-Z0-9]+)/);
+      return m ? `https://www.dailymotion.com/embed/video/${m[1]}?autoplay=1` : null;
+    },
+  },
+  {
+    name: "TikTok",
+    test: (url: string) => /tiktok\.com\/@[^/]+\/video/.test(url),
+    embed: (url: string) => {
+      const m = url.match(/tiktok\.com\/@[^/]+\/video\/(\d+)/);
+      return m ? `https://www.tiktok.com/embed/v2/${m[1]}` : null;
+    },
+  },
+  {
+    name: "Facebook",
+    test: (url: string) => /facebook\.com\/.*\/videos\//.test(url),
+    embed: (url: string) => {
+      const m = url.match(/facebook\.com\/.*\/videos\/(\d+)/);
+      return m ? `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&autoplay=true` : null;
+    },
+  },
+  {
+    name: "Instagram",
+    test: (url: string) => /instagram\.com\/(?:p|reel)\//.test(url),
+    embed: (url: string) => {
+      const m = url.match(/instagram\.com\/(?:p|reel)\/([a-zA-Z0-9_-]+)/);
+      return m ? `https://www.instagram.com/p/${m[1]}/embed/` : null;
+    },
+  },
+];
+
+function getEmbedUrl(url: string): string | null {
+  for (const provider of EMBED_PROVIDERS) {
+    if (provider.test(url)) {
+      return provider.embed(url);
+    }
+  }
+  return null;
+}
 
 export function VideoPlayerModal() {
   const { isPlayerOpen, selectedVideo, closePlayer, videos, playVideo } =
@@ -55,6 +117,13 @@ export function VideoPlayerModal() {
     locale: localeId,
   });
 
+  // Determine how to render the video
+  const isEmbed = selectedVideo.videoSource === "embed";
+  const embedUrl = isEmbed ? getEmbedUrl(selectedVideo.videoUrl) : null;
+  // Also detect legacy YouTube URLs that were saved as "upload" source
+  const legacyYoutubeEmbed = !isEmbed ? getEmbedUrl(selectedVideo.videoUrl) : null;
+  const finalEmbedUrl = embedUrl || legacyYoutubeEmbed;
+
   return (
     <AnimatePresence>
       {isPlayerOpen && (
@@ -73,23 +142,22 @@ export function VideoPlayerModal() {
                 {/* Video Player */}
                 <div className="relative w-full bg-black flex-shrink-0">
                   <div className="aspect-video w-full bg-gradient-to-br from-gray-900 to-black flex items-center justify-center">
-                    {/* Video iframe or fallback */}
-                    {selectedVideo.videoUrl.includes("youtube") ||
-                    selectedVideo.videoUrl.includes("youtu.be") ? (
+                    {/* Embed iframe (YouTube, Vimeo, Dailymotion, etc.) */}
+                    {finalEmbedUrl ? (
                       <iframe
-                        src={`https://www.youtube.com/embed/${extractYouTubeId(
-                          selectedVideo.videoUrl
-                        )}?autoplay=1&rel=0`}
+                        src={finalEmbedUrl}
                         className="w-full aspect-video"
-                        allow="autoplay; encrypted-media"
+                        allow="autoplay; encrypted-media; fullscreen"
                         allowFullScreen
                         title={selectedVideo.title}
                       />
                     ) : (
+                      /* Direct video player for uploaded files */
                       <video
                         src={selectedVideo.videoUrl}
                         controls
                         autoPlay
+                        playsInline
                         className="w-full aspect-video"
                       >
                         Browser Anda tidak mendukung video.
@@ -108,9 +176,17 @@ export function VideoPlayerModal() {
 
                 {/* Video Info */}
                 <div className="p-4 sm:p-6 overflow-y-auto flex-1">
-                  <h2 className="text-lg sm:text-xl font-bold text-white mb-2">
-                    {selectedVideo.title}
-                  </h2>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h2 className="text-lg sm:text-xl font-bold text-white flex-1">
+                      {selectedVideo.title}
+                    </h2>
+                    {(isEmbed || legacyYoutubeEmbed) && (
+                      <Badge className="border-orange-500/30 text-orange-400 text-[10px]">
+                        <Globe className="w-2.5 h-2.5 mr-0.5" />
+                        Embed
+                      </Badge>
+                    )}
+                  </div>
 
                   {/* Meta row */}
                   <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
@@ -182,6 +258,15 @@ export function VideoPlayerModal() {
   );
 }
 
+// Need a simple Badge since we moved away from import
+function Badge({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${className || ""}`}>
+      {children}
+    </span>
+  );
+}
+
 function RelatedVideoItem({
   video,
   onSelect,
@@ -219,10 +304,4 @@ function RelatedVideoItem({
       </div>
     </motion.button>
   );
-}
-
-function extractYouTubeId(url: string): string {
-  const match =
-    url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=))([^&?/]+)/);
-  return match ? match[1] : "";
 }

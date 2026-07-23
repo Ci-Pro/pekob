@@ -21,6 +21,7 @@ model Video {
   description  String?
   category     String   @default("Umum")
   videoUrl     String
+  videoSource  String   @default("upload")  // "upload" or "embed"
   thumbnailUrl String?
   duration     String?
   views        Int      @default(0)

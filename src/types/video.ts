@@ -4,6 +4,7 @@ export interface Video {
   description: string | null;
   category: string;
   videoUrl: string;
+  videoSource: string;  // "upload" or "embed"
   thumbnailUrl: string;
   duration: string | null;
   views: number;

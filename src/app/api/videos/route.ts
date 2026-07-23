@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, description, category, videoUrl, thumbnailUrl, duration, isFeatured } = body;
+    const { title, description, category, videoUrl, videoSource, thumbnailUrl, duration, isFeatured } = body;
 
     if (!title || !videoUrl) {
       return NextResponse.json(
@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
         description: description || null,
         category: category || "Umum",
         videoUrl,
+        videoSource: videoSource || "upload",
         thumbnailUrl,
         duration: duration || null,
         isFeatured: isFeatured || false,
