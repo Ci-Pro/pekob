@@ -117,8 +117,11 @@ function AdminDashboard() {
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState({ thumbnail: false, video: false });
+  const [uploadProgress, setUploadProgress] = useState({ thumbnail: false, video: false, percent: 0 });
   const [detectingDuration, setDetectingDuration] = useState(false);
+  const [videoDragOver, setVideoDragOver] = useState(false);
+  const [thumbDragOver, setThumbDragOver] = useState(false);
+  const videoFileInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form state
@@ -167,7 +170,7 @@ function AdminDashboard() {
       isFeatured: false,
     });
     setEditingVideo(null);
-    setUploadProgress({ thumbnail: false, video: false });
+    setUploadProgress({ thumbnail: false, video: false, percent: 0 });
     setDetectingDuration(false);
   };
 
@@ -220,7 +223,7 @@ function AdminDashboard() {
   };
 
   const handleVideoUpload = async (file: File) => {
-    setUploadProgress((prev) => ({ ...prev, video: true }));
+    setUploadProgress((prev) => ({ ...prev, video: true, percent: 0 }));
     setDetectingDuration(true);
     toast.info("Mengupload video ke Cloudinary...");
 
@@ -231,36 +234,54 @@ function AdminDashboard() {
         setForm((prev) => ({ ...prev, duration: clientDuration }));
       }
 
+      // Use XMLHttpRequest for upload progress tracking
       const formData = new FormData();
       formData.append("file", file);
       formData.append("type", "video");
 
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
-      const data = await res.json();
+      const result = await new Promise<{ url: string; duration?: number; error?: string }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
 
-      if (data.error) {
-        toast.error(data.error);
-        return;
-      }
+        xhr.upload.addEventListener("progress", (e) => {
+ if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 100);
+            setUploadProgress((prev) => ({ ...prev, percent: pct }));
+          }
+        });
 
-      if (data.url) {
+        xhr.addEventListener("load", () => {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            if (data.error) reject(new Error(data.error));
+            else resolve(data);
+          } catch {
+            reject(new Error("Gagal memproses respons server"));
+          }
+        });
+
+        xhr.addEventListener("error", () => reject(new Error("Gagal upload video")));
+        xhr.open("POST", "/api/upload");
+        xhr.send(formData);
+      });
+
+      if (result.url) {
         // Use Cloudinary duration if available, otherwise keep client-detected
-        if (data.duration && !clientDuration) {
-          const h = Math.floor(data.duration / 3600);
-          const m = Math.floor((data.duration % 3600) / 60);
-          const s = data.duration % 60;
+        if (result.duration && !clientDuration) {
+          const h = Math.floor(result.duration / 3600);
+          const m = Math.floor((result.duration % 3600) / 60);
+          const s = result.duration % 60;
           const durStr = h > 0
             ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
             : `${m}:${String(s).padStart(2, "0")}`;
           setForm((prev) => ({ ...prev, duration: durStr }));
         }
-        setForm((prev) => ({ ...prev, videoUrl: data.url, videoFile: file }));
+        setForm((prev) => ({ ...prev, videoUrl: result.url, videoFile: file }));
         toast.success("Video berhasil diupload ke Cloudinary");
       }
-    } catch {
-      toast.error("Gagal upload video ke Cloudinary");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal upload video ke Cloudinary");
     } finally {
-      setUploadProgress((prev) => ({ ...prev, video: false }));
+      setUploadProgress((prev) => ({ ...prev, video: false, percent: 0 }));
       setDetectingDuration(false);
     }
   };
@@ -605,30 +626,54 @@ function AdminDashboard() {
                     </button>
                   </div>
                 ) : null}
-                <label className="flex-1 cursor-pointer">
-                  <div className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-white/10 rounded-lg hover:border-white/20 hover:bg-white/5 transition-colors">
-                    {uploadProgress.thumbnail ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-red-400" />
-                    ) : (
-                      <ImageIcon className="w-4 h-4 text-muted-foreground" />
-                    )}
-                    <span className="text-xs text-muted-foreground">
-                      {form.thumbnailUrl ? "Ganti thumbnail" : "Upload thumbnail ke Cloudinary"}
-                    </span>
-                  </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        setForm((prev) => ({ ...prev, thumbnailFile: file }));
-                      }
-                    }}
-                  />
-                </label>
+                {/* Thumbnail upload with drag & drop */}
+                <div
+                  className={`border-2 border-dashed rounded-lg transition-all duration-200 ${
+                    thumbDragOver
+                      ? "border-red-500 bg-red-500/10"
+                      : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"
+                  }`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setThumbDragOver(true);
+                  }}
+                  onDragLeave={() => setThumbDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setThumbDragOver(false);
+                    const file = e.dataTransfer.files?.[0];
+                    if (file && file.type.startsWith("image/")) {
+                      setForm((prev) => ({ ...prev, thumbnailFile: file }));
+                    } else {
+                      toast.error("File harus berupa gambar");
+                    }
+                  }}
+                >
+                  <label className="block cursor-pointer">
+                    <div className="flex items-center justify-center gap-2 px-4 py-3">
+                      {uploadProgress.thumbnail ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-red-400" />
+                      ) : (
+                        <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                      )}
+                      <span className="text-xs text-muted-foreground">
+                        {form.thumbnailUrl ? "Ganti thumbnail" : "Upload thumbnail ke Cloudinary"}
+                      </span>
+                    </div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff,.avif,.svg"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setForm((prev) => ({ ...prev, thumbnailFile: file }));
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -643,31 +688,88 @@ function AdminDashboard() {
                 placeholder="Upload file video atau masukkan URL YouTube/external"
                 className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground"
               />
-              <label className="block cursor-pointer">
-                <div className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-white/10 rounded-lg hover:border-white/20 hover:bg-white/5 transition-colors">
-                  {uploadProgress.video ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-red-400" />
-                  ) : (
-                    <Upload className="w-4 h-4 text-muted-foreground" />
-                  )}
-                  <span className="text-xs text-muted-foreground">
-                    {form.videoFile
-                      ? form.videoFile.name
-                      : "Upload file video ke Cloudinary (maks 100MB)"}
-                  </span>
-                </div>
-                <input
-                  type="file"
-                  accept="video/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      setForm((prev) => ({ ...prev, videoFile: file }));
-                    }
-                  }}
-                />
-              </label>
+              {/* Video upload area with drag & drop */}
+              <div
+                className={`relative border-2 border-dashed rounded-lg transition-all duration-200 ${
+                  videoDragOver
+                    ? "border-red-500 bg-red-500/10"
+                    : form.videoUrl && form.videoFile
+                    ? "border-green-500/30 bg-green-500/5"
+                    : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"
+                }`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setVideoDragOver(true);
+                }}
+                onDragLeave={() => setVideoDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setVideoDragOver(false);
+                  const file = e.dataTransfer.files?.[0];
+                  if (file && file.type.startsWith("video/")) {
+                    handleVideoUpload(file);
+                  } else {
+                    toast.error("File harus berupa video");
+                  }
+                }}
+              >
+                <label className="block cursor-pointer">
+                  <div className="flex flex-col items-center justify-center gap-2 px-4 py-5">
+                    {uploadProgress.video ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin text-red-400" />
+                        <div className="w-full max-w-xs">
+                          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                            <span>Mengupload {form.videoFile?.name}...</span>
+                            <span>{uploadProgress.percent}%</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                            <motion.div
+                              className="h-full bg-gradient-to-r from-red-600 to-orange-500 rounded-full"
+                              initial={{ width: 0 }}
+                              animate={{ width: `${uploadProgress.percent}%` }}
+                              transition={{ duration: 0.3 }}
+                            />
+                          </div>
+                        </div>
+                      </>
+                    ) : form.videoUrl && form.videoFile ? (
+                      <>
+                        <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
+                          <Film className="w-4 h-4 text-green-400" />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-green-400 font-medium">{form.videoFile.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(form.videoFile.size / (1024 * 1024)).toFixed(1)} MB
+                          </p>
+                        </div>
+                        <p className="text-xs text-muted-foreground/60">Klik atau seret untuk ganti file</p>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-5 h-5 text-muted-foreground" />
+                        <p className="text-xs text-muted-foreground">
+                          Seret video ke sini atau klik untuk memilih file
+                        </p>
+                        <p className="text-[10px] text-muted-foreground/50">
+                          MP4, MOV, AVI, MKV, WMV, FLV, WebM, 3GP, MPEG, TS, M4V, OGG — maks 100MB
+                        </p>
+                      </>
+                    )}
+                  </div>
+                  <input
+                    ref={videoFileInputRef}
+                    type="file"
+                    accept="video/*,.mp4,.mov,.avi,.mkv,.wmv,.flv,.webm,.3gp,.3g2,.m4v,.mpeg,.mpg,.ts,.mts,.ogv,.f4v,.dv"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleVideoUpload(file);
+                    }}
+                  />
+                </label>
+              </div>
             </div>
 
             {/* Duration indicator */}
