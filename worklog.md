@@ -247,3 +247,35 @@ Stage Summary:
 - Added Vercel production URL fallback using `VERCEL_URL` environment variable
 - Login flow verified: CSRF passes → authorize() queries DB → validates password → JWT created
 - Sandbox memory limits prevent stable dev server + browser testing; on Vercel production this works fine
+
+---
+Task ID: 11
+Agent: Main
+Task: Implement video upload supporting all video formats
+
+Work Log:
+- Created `/api/upload/route.ts` — was missing from codebase, admin page was calling it but no route existed
+- Video MIME type support: MP4, M4V, 3GP, 3G2, WebM, MOV/QuickTime, AVI, MKV/Matroska, WMV, ASF, FLV, MPEG, MPG, TS/MP2T, OGG, F4V, AVC, H264, H265, DV, SWF
+- Added double validation: MIME type check + file extension regex fallback
+- Image MIME type support for thumbnails: JPEG, PNG, GIF, WebP, BMP, TIFF, SVG, AVIF
+- Chunked upload (6MB chunks) for videos larger than 6MB, up to 100MB max
+- Cloudinary upload_stream with proper error handling
+- Updated admin panel video upload UI:
+  - Drag & drop zone with visual feedback (red border on drag, green after upload)
+  - Real-time upload progress bar with percentage via XMLHttpRequest
+  - Auto-upload on file select (no separate upload step)
+  - File info display: name, size in MB
+  - Accept attribute includes all video extensions for file picker
+  - Format list displayed: MP4, MOV, AVI, MKV, WMV, FLV, WebM, 3GP, MPEG, TS, M4V, OGG
+- Updated admin panel thumbnail upload UI:
+  - Drag & drop zone for images
+  - Accept all common image formats
+- Video player uses generic `<video>` tag which works with Cloudinary's auto-conversion output (MP4/WebM)
+- Build verified: all routes registered, lint clean
+- Pushed to GitHub (comprehensive commit with all accumulated fixes)
+
+Stage Summary:
+- Video upload supports virtually all common video formats via Cloudinary auto-conversion
+- Upload UI: drag & drop + progress bar + auto-upload on select
+- /api/upload route created with proper validation, chunked upload, and error handling
+- Admin panel shows real-time progress with percentage during upload
