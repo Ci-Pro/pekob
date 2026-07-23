@@ -99,3 +99,21 @@ Stage Summary:
 - Logout button in admin header signs out and redirects to login
 - Default credentials: admin / admin123 (change before production!)
 - JWT-based sessions with 24-hour expiry
+
+---
+Task ID: 5
+Agent: Main
+Task: Update admin credentials & fix preview panel
+
+Work Log:
+- Updated admin credentials: username=`khusni99`, password=`khusni@99` (bcrypt hashed)
+- Deleted old admin record and created new one
+- Verified credentials via bcrypt.compare: valid
+- Restarted dev server multiple times to stabilize preview panel
+- All API endpoints verified: Homepage 200, Login 200, Admin 200, Login auth 302 (success)
+- Lint passes clean
+
+Stage Summary:
+- Admin credentials changed: khusni99 / khusni@99
+- All endpoints working and verified via API
+- Note: agent-browser Chrome launch causes sandbox resource spike killing dev server; use Preview Panel directly
