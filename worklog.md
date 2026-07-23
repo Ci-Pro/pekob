@@ -412,3 +412,26 @@ Stage Summary:
 - Mobile menu is now a professional slide-in panel instead of a transparent search dropdown
 - Solid dark background, proper navigation structure with categories
 - Lint passes with 0 errors
+---
+Task ID: 1
+Agent: main
+Task: Fix thumbnail upload failing on mobile (works on desktop)
+
+Work Log:
+- Read and analyzed full thumbnail upload flow in src/app/admin/page.tsx
+- Identified root cause: Mobile photos (especially iOS) use HEIC/HEIF format with empty MIME type and no file extension
+- Cloudinary's `/image/upload` with explicit `resource_type: "image"` was rejecting these files
+- Added `convertImageToJpegFile()` helper using Canvas API to convert ANY image format to JPEG before upload
+- Modified `handleThumbnailSelect()` to convert image to JPEG first, then upload the converted file
+- Changed Cloudinary endpoint from `/image/upload` to `/auto/upload` (auto-detect resource type)
+- Removed explicit `resource_type: "image"` from FormData
+- Updated `handleSubmit()` fallback to also convert before uploading
+- Added `uploadProgress.thumbnail` and `uploadProgress.video` to `isSubmitDisabled` to prevent race conditions
+- Verified: lint passes, dev server compiles without errors
+
+Stage Summary:
+- Key fix: Canvas-based JPEG conversion ensures all mobile image formats (HEIC, WebP, PNG, etc.) are converted to standard `image/jpeg` with proper filename
+- The converted JPEG File has: `name: "thumbnail.jpg"`, `type: "image/jpeg"` — guaranteed compatible with Cloudinary
+- `/auto/upload` endpoint lets Cloudinary auto-detect resource type instead of forcing "image"
+- Submit button now disabled during active uploads to prevent race conditions
+- All error states show visible toast notifications to the user

@@ -321,46 +321,87 @@ function AdminDashboard() {
     setIsFormOpen(true);
   };
 
-  // Upload thumbnail to Cloudinary via direct client-to-Cloudinary (bypasses server timeout)
+  // ── Helper: Convert any image (HEIC, WebP, PNG, etc.) to JPEG Blob via Canvas ──
+  // This is the KEY fix for mobile: iOS photos are HEIC, Android photos may be WebP.
+  // Mobile browsers often provide empty MIME type and no file extension.
+  // Canvas conversion ensures a proper image/jpeg blob that Cloudinary always accepts.
+  const convertImageToJpegFile = (
+    file: File,
+    maxW: number = 1920,
+    maxH: number = 1080,
+    quality: number = 0.85
+  ): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const blobUrl = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(blobUrl);
+        let w = img.naturalWidth;
+        let h = img.naturalHeight;
+        // Scale down if larger than max dimensions (for thumbnails, this is fine)
+        if (w > maxW || h > maxH) {
+          const ratio = Math.min(maxW / w, maxH / h);
+          w = Math.round(w * ratio);
+          h = Math.round(h * ratio);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Canvas tidak didukung browser"));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              // Create a proper File object with correct name and MIME type
+              const jpegFile = new File([blob], "thumbnail.jpg", { type: "image/jpeg" });
+              resolve(jpegFile);
+            } else {
+              reject(new Error("Gagal konversi gambar ke JPEG"));
+            }
+          },
+          "image/jpeg",
+          quality
+        );
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(blobUrl);
+        reject(new Error("Gagal membaca file gambar — format tidak didukung browser"));
+      };
+      img.src = blobUrl;
+    });
+  };
+
   const handleThumbnailUpload = async (file: File): Promise<string | null> => {
     setUploadProgress((prev) => ({ ...prev, thumbnail: true, thumbPercent: 0 }));
     toast.info("Mengupload thumbnail ke Cloudinary...");
     try {
-      // Validate — 3-level check for mobile compatibility
-      // 1. Check MIME type starts with "image/"
-      // 2. Check well-known non-image/* MIMEs from mobile
-      // 3. Check file extension (fallback for empty MIME type)
-      // On mobile: camera photos often have empty file.type and no extension in name
-      const validExts = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif", "avif", "svg"];
-      const ext = file.name.includes(".") ? file.name.split(".").pop()?.toLowerCase() || "" : "";
-      const extraMimes = ["application/octet-stream", "application/vnd.apple.mpegurl", "binary/octet-stream"];
-      const isImage = file.type.startsWith("image/") || extraMimes.includes(file.type) || validExts.includes(ext);
-      // Final mobile fallback: if file has content (size > 0) and no clear non-image type, assume it's an image
-      const isLikelyImage = !file.type.startsWith("video/") && !file.type.startsWith("audio/") && file.size > 0 && file.size <= 10 * 1024 * 1024;
-
-      if (!isImage && !isLikelyImage) {
-        toast.error(`Format file "${file.type || ext || "unknown"}" tidak didukung. Gunakan: JPEG, PNG, GIF, WebP, BMP, dll.`);
-        return null;
-      }
+      // Basic size validation (file is already JPEG after canvas conversion)
       if (file.size > 10 * 1024 * 1024) {
         toast.error("Ukuran thumbnail melebihi 10MB");
         return null;
       }
+      if (file.size === 0) {
+        toast.error("File thumbnail kosong (0 bytes)");
+        return null;
+      }
+
+      console.log("[Thumbnail] Starting upload:", file.name, file.size, "type:", file.type);
 
       // Fetch Cloudinary config
-      toast.info("Menghubungi Cloudinary...");
       const configRes = await fetch("/api/cloudinary-config");
+      if (!configRes.ok) throw new Error(`Gagal mengambil konfigurasi Cloudinary (HTTP ${configRes.status})`);
       const config = await configRes.json();
       if (config.error) throw new Error("Cloudinary belum dikonfigurasi");
 
-      console.log("[Thumbnail] Starting upload:", file.name, file.size, "type:", file.type);
-      console.log("[Thumbnail] Config:", { cloudName: config.cloudName, preset: config.uploadPreset });
+      console.log("[Thumbnail] Config OK:", { cloudName: config.cloudName });
 
-      // Use /image/upload — SAME pattern as video upload (which works on mobile)
-      const resourceType = "image";
-      const cloudUploadUrl = `${config.uploadUrl}/${resourceType}/upload`;
-
-      console.log("[Thumbnail] Upload URL:", cloudUploadUrl, "file:", file.name, "size:", file.size, "type:", file.type);
+      // Use /auto/upload — let Cloudinary auto-detect resource type
+      // This is more reliable than /image/upload for mixed formats
+      const cloudUploadUrl = `${config.uploadUrl}/auto/upload`;
 
       const result = await new Promise<{
         secure_url: string;
@@ -370,10 +411,10 @@ function AdminDashboard() {
         error?: { message?: string };
       }>((resolve, reject) => {
         const formData = new FormData();
-        formData.append("file", file);
+        formData.append("file", file, file.name || "thumbnail.jpg");
         formData.append("upload_preset", config.uploadPreset);
         formData.append("folder", "pekob/thumbnails");
-        formData.append("resource_type", resourceType);
+        // No explicit resource_type — let Cloudinary auto-detect from the JPEG blob
 
         const xhr = new XMLHttpRequest();
         xhr.upload.addEventListener("progress", (e) => {
@@ -394,31 +435,32 @@ function AdminDashboard() {
             }
           } catch (parseErr) {
             console.error("[Thumbnail] Parse error:", parseErr);
-            console.error("[Thumbnail] Raw response:", xhr.responseText);
+            console.error("[Thumbnail] Raw response:", xhr.responseText.substring(0, 500));
             reject(new Error("Gagal memproses respons Cloudinary"));
           }
         });
         xhr.addEventListener("error", () => {
           console.error("[Thumbnail] XHR network error");
-          reject(new Error("Gagal upload thumbnail ke Cloudinary (network error)"));
+          reject(new Error("Gagal upload thumbnail — periksa koneksi internet"));
         });
         xhr.addEventListener("timeout", () => {
           console.error("[Thumbnail] XHR timeout after 600s");
-          reject(new Error("Upload timeout (10 menit) — koneksi tidak stabil"));
+          reject(new Error("Upload timeout — koneksi tidak stabil, coba lagi"));
         });
-        xhr.timeout = 600000; // 10 minutes — same as video upload
+        xhr.timeout = 600000; // 10 minutes
         xhr.open("POST", cloudUploadUrl);
-        console.log("[Thumbnail] Sending XHR to:", cloudUploadUrl);
+        console.log("[Thumbnail] Sending XHR to:", cloudUploadUrl, "file:", file.name, "size:", file.size, "type:", file.type);
         xhr.send(formData);
       });
 
       if (result.secure_url) {
         console.log("[Thumbnail] Upload success:", result.secure_url);
         setForm((prev) => ({ ...prev, thumbnailUrl: result.secure_url, thumbnailFile: null }));
-        toast.success("Thumbnail berhasil diupload ke Cloudinary");
+        toast.success("Thumbnail berhasil diupload ke Cloudinary ✓");
         return result.secure_url;
       } else {
         console.error("[Thumbnail] No secure_url in result:", result);
+        toast.error("Upload selesai tapi URL tidak ditemukan");
       }
     } catch (err) {
       console.error("[Thumbnail] Upload error:", err);
@@ -429,18 +471,41 @@ function AdminDashboard() {
     return null;
   };
 
-  // Called when user selects a thumbnail file — uploads immediately + shows preview
+  // Called when user selects a thumbnail file
+  // KEY FIX: Convert to JPEG first via Canvas to handle mobile formats (HEIC, WebP, empty MIME, etc.)
   const handleThumbnailSelect = async (file: File) => {
     // Show local preview immediately
     const localUrl = URL.createObjectURL(file);
     setForm((prev) => ({ ...prev, thumbnailUrl: localUrl, thumbnailFile: file }));
-    // Upload to Cloudinary in background
-    const cloudUrl = await handleThumbnailUpload(file);
-    if (cloudUrl) {
-      // Replace local preview with Cloudinary URL
-      setForm((prev) => ({ ...prev, thumbnailUrl: cloudUrl, thumbnailFile: null }));
+
+    // Size pre-check (before conversion)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Ukuran file melebihi 10MB");
+      return;
     }
-    // If upload failed, keep the local preview (still saved as data URL on submit)
+    if (file.size === 0) {
+      toast.error("File kosong (0 bytes)");
+      return;
+    }
+
+    try {
+      toast.info("Memproses gambar untuk upload...");
+      // Convert to JPEG via Canvas — handles HEIC, WebP, PNG, BMP, etc.
+      // This is the key fix for mobile where file.type is empty and format is HEIC
+      const jpegFile = await convertImageToJpegFile(file, 1920, 1080, 0.85);
+      console.log("[Thumbnail] Converted to JPEG:", jpegFile.name, jpegFile.size, jpegFile.type);
+
+      // Upload the converted JPEG to Cloudinary
+      const cloudUrl = await handleThumbnailUpload(jpegFile);
+      if (cloudUrl) {
+        // Replace local preview with Cloudinary URL
+        setForm((prev) => ({ ...prev, thumbnailUrl: cloudUrl, thumbnailFile: null }));
+      }
+    } catch (convErr) {
+      console.error("[Thumbnail] Conversion error:", convErr);
+      toast.error(convErr instanceof Error ? convErr.message : "Gagal memproses gambar");
+      // Keep local preview — user can still submit with the local blob URL
+    }
   };
 
   const handleVideoUpload = async (file: File) => {
@@ -567,9 +632,16 @@ function AdminDashboard() {
       if (videoInputMode === "upload" && form.videoFile) {
         await handleVideoUpload(form.videoFile);
       }
-      // Upload pending thumbnail file (if user just selected and upload hasn't completed yet)
+      // Upload pending thumbnail file (if conversion or upload failed earlier)
       if (form.thumbnailFile) {
-        thumbUploadResult = await handleThumbnailUpload(form.thumbnailFile);
+        // Convert to JPEG first (same as handleThumbnailSelect) for mobile compatibility
+        try {
+          const jpegFile = await convertImageToJpegFile(form.thumbnailFile, 1920, 1080, 0.85);
+          thumbUploadResult = await handleThumbnailUpload(jpegFile);
+        } catch {
+          // Fallback: try uploading original file directly via /auto/upload
+          thumbUploadResult = await handleThumbnailUpload(form.thumbnailFile);
+        }
       }
 
       // Build the payload
@@ -679,7 +751,7 @@ function AdminDashboard() {
   );
 
   // Determine if the submit button should be disabled
-  const isSubmitDisabled = isUploading || !form.title || !form.category || (
+  const isSubmitDisabled = isUploading || uploadProgress.thumbnail || uploadProgress.video || !form.title || !form.category || (
     videoInputMode === "upload" ? !form.videoUrl : !form.embedUrl
   );
 
