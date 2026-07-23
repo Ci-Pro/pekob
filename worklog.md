@@ -435,3 +435,26 @@ Stage Summary:
 - `/auto/upload` endpoint lets Cloudinary auto-detect resource type instead of forcing "image"
 - Submit button now disabled during active uploads to prevent race conditions
 - All error states show visible toast notifications to the user
+---
+Task ID: 2
+Agent: main
+Task: Fix hero featured video section — too large, images zoomed, not responsive
+
+Work Log:
+- Analyzed hero-section.tsx: identified 5 issues causing poor display
+- Reduced hero min-height from 75vh/85vh to 45vh/50vh/55vh (mobile/sm/lg)
+- Removed scale-105 from background image (was causing zoom distortion)
+- Changed Cloudinary thumbnail transform from w_1280,h_720 to w_960,h_540 with g_faces (face-aware crop) and f_auto (auto format)
+- Reduced gradient overlay opacity for better readability
+- Made red accent glow smaller (w-64→w-80) with less opacity (10% vs 15%)
+- Improved responsive typography: title xl→2xl→3xl→4xl, description xs→sm, badges 10px→xs
+- Made CTA button more proportional: smaller padding, 12px font on mobile
+- Reduced bottom fade height from h-32/h-40 to h-20/h-28
+- Content max-width relaxed to lg:max-w-3xl for better desktop use
+- Lint passes, dev server compiles successfully
+
+Stage Summary:
+- Hero height reduced ~40% (from 75-85vh to 45-55vh)
+- Image no longer zooms (removed scale-105)
+- Cloudinary uses face-aware crop for better thumbnail composition
+- All elements properly scaled for mobile/tablet/desktop
