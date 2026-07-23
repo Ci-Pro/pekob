@@ -47,7 +47,7 @@ function AdminAuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function checkSession() {
       try {
-        const res = await fetch("/api/auth/session");
+        const res = await fetch("/api/admin/check-session");
         const data = await res.json();
         if (!data.authenticated) {
           router.replace("/admin/login");
