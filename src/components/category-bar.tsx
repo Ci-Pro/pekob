@@ -20,27 +20,33 @@ export function CategoryBar() {
   if (categories.length === 0) return null;
 
   return (
-    <div className="relative group">
+    <div className="relative group/cat">
       {/* Scroll Arrows */}
       <button
         onClick={() => scroll("left")}
-        className="hidden sm:flex absolute left-0 top-1/2 -translate-y-1/2 z-10 w-9 h-9 items-center justify-center bg-black/80 backdrop-blur-sm border border-white/10 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-white/10"
+        className="hidden sm:flex absolute -left-2 top-1/2 -translate-y-1/2 z-10 w-8 h-8 items-center justify-center bg-[#111] border border-white/[0.08] rounded-full text-white/60 opacity-0 group-hover/cat:opacity-100 transition-all duration-200 hover:bg-white/10 hover:text-white shadow-lg"
       >
-        <ChevronLeft className="w-4 h-4" />
+        <ChevronLeft className="w-3.5 h-3.5" />
       </button>
       <button
         onClick={() => scroll("right")}
-        className="hidden sm:flex absolute right-0 top-1/2 -translate-y-1/2 z-10 w-9 h-9 items-center justify-center bg-black/80 backdrop-blur-sm border border-white/10 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-white/10"
+        className="hidden sm:flex absolute -right-2 top-1/2 -translate-y-1/2 z-10 w-8 h-8 items-center justify-center bg-[#111] border border-white/[0.08] rounded-full text-white/60 opacity-0 group-hover/cat:opacity-100 transition-all duration-200 hover:bg-white/10 hover:text-white shadow-lg"
       >
-        <ChevronRight className="w-4 h-4" />
+        <ChevronRight className="w-3.5 h-3.5" />
       </button>
 
-      {/* Categories — only from database */}
+      {/* Categories */}
       <div
         ref={scrollRef}
-        className="flex gap-2 overflow-x-auto scrollbar-none pb-2 px-1"
+        className="flex gap-2 overflow-x-auto pb-1 px-0.5"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
+        {/* "Semua" chip */}
+        <CategoryChip
+          label="Semua"
+          isActive={!activeCategory}
+          onClick={() => setActiveCategory("")}
+        />
         {categories.map((category) => (
           <CategoryChip
             key={category}
@@ -69,10 +75,10 @@ function CategoryChip({
     <motion.button
       whileTap={{ scale: 0.95 }}
       onClick={onClick}
-      className={`flex-shrink-0 px-4 sm:px-5 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all duration-300 whitespace-nowrap ${
+      className={`flex-shrink-0 px-4 sm:px-5 py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-300 whitespace-nowrap ${
         isActive
-          ? "bg-red-600 text-white shadow-lg shadow-red-600/30"
-          : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/5"
+          ? "bg-red-600 text-white shadow-lg shadow-red-600/25"
+          : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white border border-white/[0.06]"
       }`}
     >
       {label}

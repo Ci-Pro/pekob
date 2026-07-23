@@ -138,11 +138,11 @@ function HomePage() {
     <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
       <Header />
 
-      {/* Hero Section */}
+      {/* Hero Section — has its own top padding for the fixed header */}
       {featuredVideo && <HeroSection />}
 
       {/* Main Content */}
-      <main className="flex-1 px-4 sm:px-6 pb-8 pt-4">
+      <main className="flex-1 px-4 sm:px-6 pb-10 pt-20 sm:pt-24">
         <div className="max-w-7xl mx-auto space-y-8 sm:space-y-10">
           {/* Category Bar */}
           <CategoryBar />

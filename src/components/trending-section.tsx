@@ -15,13 +15,13 @@ export function TrendingSection() {
     <section className="space-y-5">
       {/* Section header */}
       <div className="flex items-center gap-3">
-        <div className="w-1 h-8 bg-gradient-to-b from-red-500 to-orange-500 rounded-full" />
+        <div className="w-1 h-6 bg-gradient-to-b from-orange-500 to-yellow-500 rounded-full" />
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-white">
+          <h2 className="text-lg sm:text-xl font-bold text-white">
             Trending Sekarang 🔥
           </h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Video paling banyak ditonton minggu ini
+          <p className="text-xs text-muted-foreground/60 mt-0.5">
+            Video paling banyak ditonton
           </p>
         </div>
       </div>
