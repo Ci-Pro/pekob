@@ -348,6 +348,7 @@ function AdminDashboard() {
       }
 
       // Fetch Cloudinary config
+      toast.info("Menghubungi Cloudinary...");
       const configRes = await fetch("/api/cloudinary-config");
       const config = await configRes.json();
       if (config.error) throw new Error("Cloudinary belum dikonfigurasi");
@@ -355,8 +356,11 @@ function AdminDashboard() {
       console.log("[Thumbnail] Starting upload:", file.name, file.size, "type:", file.type);
       console.log("[Thumbnail] Config:", { cloudName: config.cloudName, preset: config.uploadPreset });
 
-      // Use /auto/upload so Cloudinary auto-detects resource type — best for mobile
-      const cloudUploadUrl = `${config.uploadUrl}/auto/upload`;
+      // Use /image/upload — SAME pattern as video upload (which works on mobile)
+      const resourceType = "image";
+      const cloudUploadUrl = `${config.uploadUrl}/${resourceType}/upload`;
+
+      console.log("[Thumbnail] Upload URL:", cloudUploadUrl, "file:", file.name, "size:", file.size, "type:", file.type);
 
       const result = await new Promise<{
         secure_url: string;
@@ -369,7 +373,7 @@ function AdminDashboard() {
         formData.append("file", file);
         formData.append("upload_preset", config.uploadPreset);
         formData.append("folder", "pekob/thumbnails");
-        // No resource_type — /auto/upload auto-detects
+        formData.append("resource_type", resourceType);
 
         const xhr = new XMLHttpRequest();
         xhr.upload.addEventListener("progress", (e) => {
@@ -399,11 +403,12 @@ function AdminDashboard() {
           reject(new Error("Gagal upload thumbnail ke Cloudinary (network error)"));
         });
         xhr.addEventListener("timeout", () => {
-          console.error("[Thumbnail] XHR timeout after 300s");
-          reject(new Error("Upload timeout — coba lagi dengan koneksi lebih stabil"));
+          console.error("[Thumbnail] XHR timeout after 600s");
+          reject(new Error("Upload timeout (10 menit) — koneksi tidak stabil"));
         });
-        xhr.timeout = 300000; // 5 minutes — enough for slow connections
+        xhr.timeout = 600000; // 10 minutes — same as video upload
         xhr.open("POST", cloudUploadUrl);
+        console.log("[Thumbnail] Sending XHR to:", cloudUploadUrl);
         xhr.send(formData);
       });
 
