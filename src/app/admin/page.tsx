@@ -326,12 +326,20 @@ function AdminDashboard() {
     setUploadProgress((prev) => ({ ...prev, thumbnail: true, thumbPercent: 0 }));
     toast.info("Mengupload thumbnail ke Cloudinary...");
     try {
-      // Validate image file (client-side)
+      // Validate — 3-level check for mobile compatibility
+      // 1. Check MIME type starts with "image/"
+      // 2. Check well-known non-image/* MIMEs from mobile
+      // 3. Check file extension (fallback for empty MIME type)
+      // On mobile: camera photos often have empty file.type and no extension in name
       const validExts = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif", "avif", "svg"];
-      const ext = file.name.split(".").pop()?.toLowerCase() || "";
-      const isImage = file.type.startsWith("image/") || validExts.includes(ext);
-      if (!isImage) {
-        toast.error(`Format file "${file.type || ext || "unknown"}" tidak didukung. Gunakan: JPEG, PNG, GIF, WebP, BMP, TIFF, AVIF, SVG.`);
+      const ext = file.name.includes(".") ? file.name.split(".").pop()?.toLowerCase() || "" : "";
+      const extraMimes = ["application/octet-stream", "application/vnd.apple.mpegurl", "binary/octet-stream"];
+      const isImage = file.type.startsWith("image/") || extraMimes.includes(file.type) || validExts.includes(ext);
+      // Final mobile fallback: if file has content (size > 0) and no clear non-image type, assume it's an image
+      const isLikelyImage = !file.type.startsWith("video/") && !file.type.startsWith("audio/") && file.size > 0 && file.size <= 10 * 1024 * 1024;
+
+      if (!isImage && !isLikelyImage) {
+        toast.error(`Format file "${file.type || ext || "unknown"}" tidak didukung. Gunakan: JPEG, PNG, GIF, WebP, BMP, dll.`);
         return null;
       }
       if (file.size > 10 * 1024 * 1024) {
@@ -347,8 +355,8 @@ function AdminDashboard() {
       console.log("[Thumbnail] Starting upload:", file.name, file.size, "type:", file.type);
       console.log("[Thumbnail] Config:", { cloudName: config.cloudName, preset: config.uploadPreset });
 
-      // Use /image/upload with explicit resource_type — same pattern as video upload
-      const cloudUploadUrl = `${config.uploadUrl}/image/upload`;
+      // Use /auto/upload so Cloudinary auto-detects resource type — best for mobile
+      const cloudUploadUrl = `${config.uploadUrl}/auto/upload`;
 
       const result = await new Promise<{
         secure_url: string;
@@ -361,7 +369,7 @@ function AdminDashboard() {
         formData.append("file", file);
         formData.append("upload_preset", config.uploadPreset);
         formData.append("folder", "pekob/thumbnails");
-        formData.append("resource_type", "image");
+        // No resource_type — /auto/upload auto-detects
 
         const xhr = new XMLHttpRequest();
         xhr.upload.addEventListener("progress", (e) => {
@@ -1217,13 +1225,8 @@ function AdminDashboard() {
                     if (uploadProgress.thumbnail) return;
                     const file = e.dataTransfer.files?.[0];
                     if (file) {
-                      const ext = file.name.split(".").pop()?.toLowerCase() || "";
-                      const isImage = file.type.startsWith("image/") || ["jpg","jpeg","png","gif","webp","bmp","tiff","avif","svg"].includes(ext);
-                      if (isImage) {
-                        handleThumbnailSelect(file);
-                      } else {
-                        toast.error("File harus berupa gambar (JPEG, PNG, GIF, WebP, dll.)");
-                      }
+                      // Accept any file — let Cloudinary/validate handle it
+                      handleThumbnailSelect(file);
                     }
                   }}
                 >
@@ -1246,7 +1249,7 @@ function AdminDashboard() {
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff,.avif,.svg"
+                      accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff,.avif,.svg,.heic,.heif"
                       className="hidden"
                       disabled={uploadProgress.thumbnail}
                       onChange={(e) => {
