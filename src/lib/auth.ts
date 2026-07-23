@@ -1,10 +1,7 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import { PrismaClient } from "@prisma/client";
-
-// Direct PrismaClient instantiation for NextAuth (avoids module caching issues)
-const prisma = new PrismaClient();
+import { db } from "@/lib/db";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -20,7 +17,7 @@ export const authOptions: NextAuthOptions = {
             return null;
           }
 
-          const admin = await prisma.admin.findUnique({
+          const admin = await db.admin.findUnique({
             where: { username: credentials.username as string },
           });
 

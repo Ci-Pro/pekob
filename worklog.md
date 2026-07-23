@@ -117,3 +117,30 @@ Stage Summary:
 - Admin credentials changed: khusni99 / khusni@99
 - All endpoints working and verified via API
 - Note: agent-browser Chrome launch causes sandbox resource spike killing dev server; use Preview Panel directly
+
+---
+Task ID: 6
+Agent: Main
+Task: Migrate database from SQLite to Neon PostgreSQL with provided connection string
+
+Work Log:
+- Received Neon PostgreSQL connection string: `postgresql://neondb_owner:***@ep-curly-sound-ayn5cpy7-pooler.c-5.us-east-2.aws.neon.tech/neondb`
+- Updated `prisma/schema.prisma`: switched provider from `sqlite` to `postgresql`, added `directUrl = env("DIRECT_DATABASE_URL")` for migrations
+- Updated `.env`: set `DATABASE_URL` (pooled connection) and `DIRECT_DATABASE_URL` (direct connection for migrations), added `NEXTAUTH_URL=http://localhost:3000`
+- Updated `src/lib/db.ts`: simplified to standard PrismaClient (no Neon adapter needed for standard Node.js serverless)
+- Updated `src/lib/auth.ts`: changed from direct `new PrismaClient()` to shared `db` import from `@/lib/db`
+- Ran `prisma generate` + `prisma db push` — schema successfully created Admin + Video tables in Neon
+- Seeded admin credentials in Neon: `khusni99` / `khusni@99` (bcrypt hashed, salt rounds 12)
+- Fixed critical issue: shell environment variable `DATABASE_URL` was set to old SQLite path, overriding `.env` file. Fixed by adding `unset DATABASE_URL` to dev script in `package.json`
+- Removed `.env` quotes (some env parsers handle them differently with query string params containing `&`)
+- Verified all API endpoints via curl: Homepage 200, Videos API 200 (empty, no videos yet), Categories 200, Sync API 200 (version:0, count:0), Admin Login 200, Auth Session 200
+- Verified Neon database connection via standalone bun script: admin `khusni99` found
+- Cleaned up debug route created during troubleshooting
+
+Stage Summary:
+- Database fully migrated from SQLite to Neon PostgreSQL (production-ready)
+- Tables created in Neon: Admin (with khusni99 seeded) + Video (empty, ready for admin uploads)
+- Connection pooling configured (pooler URL for app, direct URL for migrations)
+- Dev script updated to unset shell DATABASE_URL to prevent SQLite override
+- All endpoints verified working with Neon database
+- Real-time sync (`/api/sync` polling) works with Neon PostgreSQL
