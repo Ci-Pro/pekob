@@ -36,11 +36,6 @@ export function Header() {
     setMobileMenuOpen(false);
   };
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setMobileMenuOpen(false);
-  };
-
   return (
     <>
       <header
@@ -98,6 +93,20 @@ export function Header() {
               />
             </nav>
 
+            {/* Mobile Search Bar */}
+            <div className="md:hidden flex-1 mx-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60" />
+                <input
+                  type="text"
+                  placeholder="Cari..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-8.5 pr-3 py-2 bg-white/[0.04] border border-white/[0.06] rounded-full text-[13px] text-white placeholder:text-muted-foreground/40 focus:outline-none focus:border-red-500/30 focus:bg-white/[0.06] transition-all duration-300"
+                />
+              </div>
+            </div>
+
             {/* Mobile Menu Toggle */}
             <button
               onClick={() => setMobileMenuOpen(true)}
@@ -134,22 +143,6 @@ export function Header() {
               </span>
             </div>
           </SheetHeader>
-
-          {/* Search */}
-          <div className="p-4 pb-2">
-            <form onSubmit={handleSearchSubmit}>
-              <div className="relative">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Cari video..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-white/[0.06] border border-white/[0.08] rounded-xl text-sm text-white placeholder:text-muted-foreground/50 focus:outline-none focus:border-red-500/40 focus:bg-white/[0.08] focus:ring-2 focus:ring-red-500/10 transition-all"
-                />
-              </div>
-            </form>
-          </div>
 
           {/* Navigation Links */}
           <div className="px-3 py-1">
