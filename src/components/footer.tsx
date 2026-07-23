@@ -1,6 +1,6 @@
 "use client";
 
-import { Flame, Tv, Heart, Film } from "lucide-react";
+import { Tv, Heart, Film } from "lucide-react";
 import Link from "next/link";
 
 export function Footer() {
@@ -30,7 +30,7 @@ export function Footer() {
               Navigasi
             </h4>
             <ul className="space-y-2">
-              {["Beranda", "Trending", "Film", "Musik"].map((item) => (
+              {["Beranda", "Trending"].map((item) => (
                 <li key={item}>
                   <Link
                     href="/"
@@ -44,16 +44,13 @@ export function Footer() {
           </div>
 
           <div>
-            <h4 className="text-sm font-semibold text-white mb-3">Kategori</h4>
+            <h4 className="text-sm font-semibold text-white mb-3">Info</h4>
             <ul className="space-y-2">
-              {["Komedi", "Gaming", "Olahraga", "Kuliner"].map((item) => (
+              {["Pusat Bantuan", "Panduan Kreator", "Komunitas"].map((item) => (
                 <li key={item}>
-                  <Link
-                    href="/"
-                    className="text-xs text-muted-foreground hover:text-white transition-colors"
-                  >
+                  <span className="text-xs text-muted-foreground">
                     {item}
-                  </Link>
+                  </span>
                 </li>
               ))}
             </ul>

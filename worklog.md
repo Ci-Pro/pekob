@@ -25,3 +25,24 @@ Stage Summary:
 - Admin Panel: Video CRUD operations, file upload support, category management, featured toggle
 - 8 demo videos seeded with AI-generated thumbnails
 - All routes working: / (homepage) and /admin (admin panel)
+
+---
+Task ID: 2
+Agent: Main
+Task: Remove hardcoded categories, make fully admin-determined
+
+Work Log:
+- Searched all codebase files for hardcoded category references (Dokumenter, Film, Komedi, Kuliner, Musik, Olahraga, Viral)
+- Found hardcoded categories in footer.tsx ("Film", "Musik" in Navigasi; "Komedi", "Gaming", "Olahraga", "Kuliner" in Kategori section)
+- Updated footer.tsx: replaced "Navigasi" section with generic links (Beranda, Trending) and "Kategori" section renamed to "Info" with generic links (Pusat Bantuan, Panduan Kreator, Komunitas)
+- Removed unused Flame import from footer.tsx
+- Cleared all 8 seed demo videos from SQLite database via Prisma client
+- Verified with agent-browser: homepage shows no category bar (hidden when empty), no hardcoded categories in header or footer
+- Verified admin upload form: Kategori field is free text input with no hardcoded suggestions (datalist only shows existing categories from DB)
+- Lint passes clean
+
+Stage Summary:
+- All hardcoded category names removed from frontend code
+- Database cleared of seed data — categories now solely determined by admin uploads
+- Footer shows generic navigation/info links, no category-specific hardcoded entries
+- Category bar on homepage hidden when no categories exist, appears dynamically when admin uploads videos
