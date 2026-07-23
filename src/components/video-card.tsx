@@ -2,11 +2,29 @@
 
 import type { Video } from "@/types/video";
 import { useVideoStore } from "@/store/video-store";
-import { Play, Eye, Clock } from "lucide-react";
-import Image from "next/image";
+import { Play, Eye, Clock, Film } from "lucide-react";
 import { motion } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
 import { id as localeId } from "date-fns/locale";
+
+function ThumbnailImage({ video }: { video: Video }) {
+  if (video.thumbnailUrl) {
+    return (
+      <img
+        src={video.thumbnailUrl}
+        alt={video.title}
+        className="w-full h-full object-cover"
+      />
+    );
+  }
+
+  // Gradient placeholder when no thumbnail
+  return (
+    <div className="w-full h-full bg-gradient-to-br from-red-900/40 via-orange-900/30 to-black flex items-center justify-center">
+      <Film className="w-8 h-8 text-white/20" />
+    </div>
+  );
+}
 
 export function VideoCard({ video, index = 0 }: { video: Video; index?: number }) {
   const { playVideo } = useVideoStore();
@@ -27,13 +45,7 @@ export function VideoCard({ video, index = 0 }: { video: Video; index?: number }
     >
       {/* Thumbnail */}
       <div className="relative aspect-video rounded-xl overflow-hidden bg-white/5 mb-3">
-        <Image
-          src={video.thumbnailUrl}
-          alt={video.title}
-          fill
-          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-          className="object-cover transition-transform duration-500 group-hover:scale-110"
-        />
+        <ThumbnailImage video={video} />
 
         {/* Gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />

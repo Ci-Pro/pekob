@@ -1,8 +1,7 @@
 "use client";
 
 import { useVideoStore } from "@/store/video-store";
-import { Play, TrendingUp, Clock, Eye } from "lucide-react";
-import Image from "next/image";
+import { Play, TrendingUp, Clock, Eye, Film } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export function HeroSection() {
@@ -12,18 +11,22 @@ export function HeroSection() {
 
   return (
     <section className="relative w-full min-h-[75vh] sm:min-h-[85vh] pt-16 sm:pt-20 overflow-hidden">
-      {/* Background Image */}
+      {/* Background Image or Placeholder */}
       <div className="absolute inset-0">
-        <Image
-          src={featuredVideo.thumbnailUrl}
-          alt={featuredVideo.title}
-          fill
-          priority
-          className="object-cover scale-105"
-        />
-        {/* Multi-layer gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-black/50 to-black/20" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/30 to-transparent" />
+        {featuredVideo.thumbnailUrl ? (
+          <>
+            <img
+              src={featuredVideo.thumbnailUrl}
+              alt={featuredVideo.title}
+              className="absolute inset-0 w-full h-full object-cover scale-105"
+            />
+            {/* Multi-layer gradient overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-black/50 to-black/20" />
+            <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/30 to-transparent" />
+          </>
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-red-950 via-[#0a0a0a] to-black" />
+        )}
         {/* Red accent glow */}
         <div className="absolute bottom-20 left-0 w-96 h-96 bg-red-600/15 rounded-full blur-[120px]" />
       </div>

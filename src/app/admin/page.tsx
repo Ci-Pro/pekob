@@ -282,7 +282,7 @@ function AdminDashboard() {
         description: form.description,
         category: form.category,
         videoUrl: form.videoUrl,
-        thumbnailUrl: form.thumbnailUrl,
+        thumbnailUrl: form.thumbnailUrl || null,
         duration: form.duration,
         isFeatured: form.isFeatured,
       };
@@ -437,11 +437,17 @@ function AdminDashboard() {
                 >
                   {/* Thumbnail */}
                   <div className="relative w-28 sm:w-36 aspect-video rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
-                    <img
-                      src={video.thumbnailUrl}
-                      alt={video.title}
-                      className="w-full h-full object-cover"
-                    />
+                    {video.thumbnailUrl ? (
+                      <img
+                        src={video.thumbnailUrl}
+                        alt={video.title}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-red-900/40 via-orange-900/30 to-black flex items-center justify-center">
+                        <Film className="w-5 h-5 text-white/20" />
+                      </div>
+                    )}
                     {video.isFeatured && (
                       <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-red-600 rounded text-[9px] font-bold uppercase">
                         Featured
@@ -575,7 +581,7 @@ function AdminDashboard() {
 
             {/* Thumbnail Upload */}
             <div className="space-y-2">
-              <Label>Thumbnail *</Label>
+              <Label>Thumbnail (opsional)</Label>
               <div className="flex items-center gap-3">
                 {form.thumbnailUrl ? (
                   <div className="relative w-24 h-14 rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
@@ -700,7 +706,7 @@ function AdminDashboard() {
               </Button>
               <Button
                 type="submit"
-                disabled={isUploading || !form.title || !form.videoUrl || !form.thumbnailUrl || !form.category}
+                disabled={isUploading || !form.title || !form.videoUrl || !form.category}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold gap-2"
               >
                 {isUploading ? (

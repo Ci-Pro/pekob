@@ -6,7 +6,7 @@ import {
   DialogContent,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { X, Share2, Heart, Eye, Clock } from "lucide-react";
+import { X, Share2, Heart, Eye, Clock, Film } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
@@ -196,11 +196,17 @@ function RelatedVideoItem({
       className="flex gap-3 w-full p-2 rounded-lg hover:bg-white/5 transition-colors text-left group"
     >
       <div className="relative w-36 flex-shrink-0 aspect-video rounded-lg overflow-hidden bg-white/5">
-        <img
-          src={video.thumbnailUrl}
-          alt={video.title}
-          className="w-full h-full object-cover"
-        />
+        {video.thumbnailUrl ? (
+          <img
+            src={video.thumbnailUrl}
+            alt={video.title}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-red-900/40 via-orange-900/30 to-black flex items-center justify-center">
+            <Film className="w-5 h-5 text-white/20" />
+          </div>
+        )}
       </div>
       <div className="flex-1 min-w-0 py-0.5">
         <h4 className="text-sm font-medium text-white line-clamp-2 group-hover:text-red-400 transition-colors">

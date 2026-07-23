@@ -61,9 +61,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { title, description, category, videoUrl, thumbnailUrl, duration, isFeatured } = body;
 
-    if (!title || !videoUrl || !thumbnailUrl) {
+    if (!title || !videoUrl) {
       return NextResponse.json(
-        { error: "Judul, URL video, dan thumbnail wajib diisi" },
+        { error: "Judul dan URL video wajib diisi" },
         { status: 400 }
       );
     }

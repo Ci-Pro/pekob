@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import cloudinary from "@/lib/cloudinary";
+import { v2 as cloudinaryV2 } from "cloudinary";
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,12 +22,12 @@ export async function POST(request: NextRequest) {
     // Validate Cloudinary config
     if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
       return NextResponse.json(
-        { error: "Cloudinary belum dikonfigurasi. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, dan CLOUDINARY_API_SECRET di environment variables." },
+        { error: "Cloudinary belum dikonfigurasi." },
         { status: 500 }
       );
     }
 
-    // Validate file size (Cloudinary free: 100MB for video, 10MB for image)
+    // Validate file size
     const maxSize = type === "video" ? 100 * 1024 * 1024 : 10 * 1024 * 1024;
     if (file.size > maxSize) {
       return NextResponse.json(
@@ -35,39 +36,57 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Convert File to buffer for Cloudinary upload
+    // Convert File to buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Determine resource type and folder
-    const resourceType = type === "video" ? "video" : "image";
+    // Generate unique public_id with folder
     const folder = type === "video" ? "pekob/videos" : "pekob/thumbnails";
-
-    // Determine format
-    const ext = file.name.split(".").pop() || (type === "video" ? "mp4" : "jpg");
     const publicId = `${folder}/${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const resourceType = type === "video" ? "video" : "image";
 
-    // Upload to Cloudinary using buffer
-    const uploadResult = await new Promise<{ secure_url: string; public_id: string; duration?: number; width?: number; height?: number }>(
-      (resolve, reject) => {
-        const uploadStream = cloudinary.uploader.upload_stream(
+    let uploadResult: {
+      secure_url: string;
+      public_id: string;
+      duration?: number;
+      width?: number;
+      height?: number;
+      format?: string;
+    };
+
+    if (type === "video") {
+      // Use upload_large for videos (handles chunking automatically)
+      uploadResult = await new Promise((resolve, reject) => {
+        cloudinaryV2.uploader.upload_large(
+          undefined as unknown as string,
           {
-            resource_type: resourceType,
+            resource_type: "video",
             public_id: publicId,
-            format: ext,
-            folder: folder.replace(`${publicId.split("/")[0]}/`, ""),
-            ...(type === "video" && { chunk_size: 6_000_000 }), // 6MB chunks for video
+            chunk_size: 6_000_000, // 6MB chunks
           },
           (error, result) => {
             if (error) reject(error);
             else resolve(result!);
           }
-        );
-        uploadStream.end(buffer);
-      }
-    );
+        ).end(buffer);
+      });
+    } else {
+      // Standard upload for images
+      uploadResult = await new Promise((resolve, reject) => {
+        cloudinaryV2.uploader.upload_stream(
+          {
+            resource_type: "image",
+            public_id: publicId,
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result!);
+          }
+        ).end(buffer);
+      });
+    }
 
-    // For video: extract duration from Cloudinary response
+    // Extract duration from Cloudinary video response
     let duration: number | undefined;
     if (type === "video" && uploadResult.duration) {
       duration = Math.round(uploadResult.duration);
@@ -79,6 +98,7 @@ export async function POST(request: NextRequest) {
       name: file.name,
       size: buffer.length,
       duration,
+      format: uploadResult.format,
     });
   } catch (error) {
     console.error("Cloudinary upload error:", error);
