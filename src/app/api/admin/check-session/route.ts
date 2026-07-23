@@ -1,29 +1,35 @@
 import { NextResponse } from "next/server";
-import { jwt } from "next-auth/jwt";
 
 // Session check for client-side AdminAuthGuard.
-// Decodes the JWT directly — no database query needed,
-// so it never crashes even if the DB is temporarily unreachable.
-export async function GET() {
+// Proxies to NextAuth's built-in /api/auth/session endpoint
+// which handles JWT decoding internally and always works correctly.
+export async function GET(request: Request) {
   try {
-    const token = await jwt({
-      secret: process.env.NEXTAUTH_SECRET,
-      secureCookie: process.env.NODE_ENV === "production",
-    });
+    const sessionRes = await fetch(
+      new URL("/api/auth/session", request.url),
+      {
+        headers: {
+          cookie: request.headers.get("cookie") || "",
+        },
+        cache: "no-store",
+      }
+    );
+    const data = await sessionRes.json();
 
-    if (!token || !token.id) {
-      return NextResponse.json({ authenticated: false });
+    if (data?.user?.id) {
+      return NextResponse.json({
+        authenticated: true,
+        user: {
+          id: data.user.id,
+          name: data.user.name,
+          role: data.user.role,
+        },
+      });
     }
 
-    return NextResponse.json({
-      authenticated: true,
-      user: {
-        id: token.id as string,
-        name: token.name as string,
-        role: token.role as string,
-      },
-    });
-  } catch {
+    return NextResponse.json({ authenticated: false });
+  } catch (error) {
+    console.error("[check-session] Error:", error);
     return NextResponse.json({ authenticated: false }, { status: 200 });
   }
 }
