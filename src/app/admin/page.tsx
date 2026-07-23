@@ -220,7 +220,7 @@ function AdminDashboard() {
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState({ thumbnail: false, video: false, percent: 0 });
+  const [uploadProgress, setUploadProgress] = useState({ thumbnail: false, thumbPercent: 0, video: false, percent: 0 });
   const [detectingDuration, setDetectingDuration] = useState(false);
   const [videoDragOver, setVideoDragOver] = useState(false);
   const [thumbDragOver, setThumbDragOver] = useState(false);
@@ -286,7 +286,7 @@ function AdminDashboard() {
       isFeatured: false,
     });
     setEditingVideo(null);
-    setUploadProgress({ thumbnail: false, video: false, percent: 0 });
+    setUploadProgress({ thumbnail: false, thumbPercent: 0, video: false, percent: 0 });
     setDetectingDuration(false);
     setVideoInputMode("upload");
     setEmbedInfo(null);
@@ -323,7 +323,7 @@ function AdminDashboard() {
 
   // Upload thumbnail to Cloudinary via direct client-to-Cloudinary (bypasses server timeout)
   const handleThumbnailUpload = async (file: File): Promise<string | null> => {
-    setUploadProgress((prev) => ({ ...prev, thumbnail: true }));
+    setUploadProgress((prev) => ({ ...prev, thumbnail: true, thumbPercent: 0 }));
     toast.info("Mengupload thumbnail ke Cloudinary...");
     try {
       // Validate image file (client-side)
@@ -366,7 +366,8 @@ function AdminDashboard() {
         const xhr = new XMLHttpRequest();
         xhr.upload.addEventListener("progress", (e) => {
           if (e.lengthComputable) {
-            console.log("[Thumbnail] Progress:", Math.round((e.loaded / e.total) * 100) + "%");
+            const pct = Math.round((e.loaded / e.total) * 100);
+            setUploadProgress((prev) => ({ ...prev, thumbPercent: pct }));
           }
         });
         xhr.addEventListener("load", () => {
@@ -410,7 +411,7 @@ function AdminDashboard() {
       console.error("[Thumbnail] Upload error:", err);
       toast.error(err instanceof Error ? err.message : "Gagal upload thumbnail ke Cloudinary");
     } finally {
-      setUploadProgress((prev) => ({ ...prev, thumbnail: false }));
+      setUploadProgress((prev) => ({ ...prev, thumbnail: false, thumbPercent: 0 }));
     }
     return null;
   };
@@ -1140,19 +1141,39 @@ function AdminDashboard() {
             {/* Thumbnail Upload */}
             <div className="space-y-2">
               <Label>Thumbnail (opsional — otomatis dari video/embed jika tidak diupload)</Label>
+
+              {/* Upload progress indicator */}
+              {uploadProgress.thumbnail && (
+                <div className="flex items-center gap-3 px-3 py-2.5 bg-red-500/10 border border-red-500/20 rounded-lg">
+                  <Loader2 className="w-4 h-4 animate-spin text-red-400 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="text-red-300 font-medium">Mengupload thumbnail...</span>
+                      <span className="text-red-400">{uploadProgress.thumbPercent}%</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                      <motion.div
+                        className="h-full bg-gradient-to-r from-red-600 to-orange-500 rounded-full"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${uploadProgress.thumbPercent}%` }}
+                        transition={{ duration: 0.3 }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center gap-3">
                 {form.thumbnailUrl ? (
-                  <div className="relative w-24 h-14 rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
+                  <div className="relative w-24 h-14 rounded-lg overflow-hidden bg-white/5 flex-shrink-0 ring-1 ring-green-500/30">
                     <img
                       src={form.thumbnailUrl}
                       alt="Thumbnail"
                       className="w-full h-full object-cover"
                     />
-                    {uploadProgress.thumbnail && (
-                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                        <Loader2 className="w-5 h-5 animate-spin text-red-400" />
-                      </div>
-                    )}
+                    <div className="absolute bottom-0.5 left-0.5 px-1.5 py-0.5 rounded bg-green-500/90 text-[9px] font-bold text-white">
+                      ✓
+                    </div>
                     <button
                       type="button"
                       onClick={() =>
@@ -1162,7 +1183,7 @@ function AdminDashboard() {
                           thumbnailFile: null,
                         }))
                       }
-                      className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/80 flex items-center justify-center"
+                      className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/80 flex items-center justify-center hover:bg-red-600 transition-colors"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -1170,15 +1191,19 @@ function AdminDashboard() {
                 ) : null}
                 {/* Thumbnail upload with drag & drop */}
                 <div
-                  className={`border-2 border-dashed rounded-lg transition-all duration-200 ${
-                    thumbDragOver
+                  className={`flex-1 border-2 border-dashed rounded-lg transition-all duration-200 ${
+                    uploadProgress.thumbnail
+                      ? "border-red-500/30 bg-red-500/5 pointer-events-none"
+                      : thumbDragOver
                       ? "border-red-500 bg-red-500/10"
+                      : form.thumbnailUrl
+                      ? "border-green-500/20 bg-green-500/5"
                       : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"
                   }`}
                   onDragOver={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    setThumbDragOver(true);
+                    if (!uploadProgress.thumbnail) setThumbDragOver(true);
                   }}
                   onDragLeave={(e) => {
                     e.preventDefault();
@@ -1189,9 +1214,9 @@ function AdminDashboard() {
                     e.preventDefault();
                     e.stopPropagation();
                     setThumbDragOver(false);
+                    if (uploadProgress.thumbnail) return;
                     const file = e.dataTransfer.files?.[0];
                     if (file) {
-                      // Accept by MIME type or extension (mobile compatibility)
                       const ext = file.name.split(".").pop()?.toLowerCase() || "";
                       const isImage = file.type.startsWith("image/") || ["jpg","jpeg","png","gif","webp","bmp","tiff","avif","svg"].includes(ext);
                       if (isImage) {
@@ -1202,22 +1227,28 @@ function AdminDashboard() {
                     }
                   }}
                 >
-                  <label className="block cursor-pointer">
+                  <label className={`block cursor-pointer${uploadProgress.thumbnail ? " pointer-events-none" : ""}`}>
                     <div className="flex items-center justify-center gap-2 px-4 py-3">
                       {uploadProgress.thumbnail ? (
-                        <Loader2 className="w-4 h-4 animate-spin text-red-400" />
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-red-400" />
+                          <span className="text-xs text-red-300">{uploadProgress.thumbPercent}% — Mengupload...</span>
+                        </>
                       ) : (
-                        <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                        <>
+                          <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">
+                            {form.thumbnailUrl ? "Ganti thumbnail" : "Upload thumbnail ke Cloudinary"}
+                          </span>
+                        </>
                       )}
-                      <span className="text-xs text-muted-foreground">
-                        {form.thumbnailUrl ? "Ganti thumbnail" : "Upload thumbnail ke Cloudinary"}
-                      </span>
                     </div>
                     <input
                       ref={fileInputRef}
                       type="file"
                       accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff,.avif,.svg"
                       className="hidden"
+                      disabled={uploadProgress.thumbnail}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
