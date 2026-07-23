@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import cloudinary from "@/lib/cloudinary";
-import { v2 as cloudinaryV2 } from "cloudinary";
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,12 +21,12 @@ export async function POST(request: NextRequest) {
     // Validate Cloudinary config
     if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
       return NextResponse.json(
-        { error: "Cloudinary belum dikonfigurasi." },
+        { error: "Cloudinary belum dikonfigurasi. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, dan CLOUDINARY_API_SECRET di environment variables." },
         { status: 500 }
       );
     }
 
-    // Validate file size
+    // Validate file size (Cloudinary free: 100MB for video, 10MB for image)
     const maxSize = type === "video" ? 100 * 1024 * 1024 : 10 * 1024 * 1024;
     if (file.size > maxSize) {
       return NextResponse.json(
@@ -36,7 +35,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Convert File to buffer
+    // Convert File to buffer for Cloudinary upload
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
@@ -45,48 +44,41 @@ export async function POST(request: NextRequest) {
     const publicId = `${folder}/${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const resourceType = type === "video" ? "video" : "image";
 
-    let uploadResult: {
-      secure_url: string;
-      public_id: string;
-      duration?: number;
-      width?: number;
-      height?: number;
-      format?: string;
-    };
+    // Upload to Cloudinary using upload_stream (works for both image and video with buffers)
+    const uploadResult = await new Promise<{ secure_url: string; public_id: string; duration?: number; width?: number; height?: number; format?: string }>(
+      (resolve, reject) => {
+        const uploadOptions: Record<string, unknown> = {
+          resource_type: resourceType,
+          public_id: publicId,
+        };
 
-    if (type === "video") {
-      // Use upload_large for videos (handles chunking automatically)
-      uploadResult = await new Promise((resolve, reject) => {
-        cloudinaryV2.uploader.upload_large(
-          undefined as unknown as string,
-          {
-            resource_type: "video",
-            public_id: publicId,
-            chunk_size: 6_000_000, // 6MB chunks
-          },
-          (error, result) => {
-            if (error) reject(error);
-            else resolve(result!);
-          }
-        ).end(buffer);
-      });
-    } else {
-      // Standard upload for images
-      uploadResult = await new Promise((resolve, reject) => {
-        cloudinaryV2.uploader.upload_stream(
-          {
-            resource_type: "image",
-            public_id: publicId,
-          },
-          (error, result) => {
-            if (error) reject(error);
-            else resolve(result!);
-          }
-        ).end(buffer);
-      });
-    }
+        // Add chunk_size for video uploads (6MB chunks)
+        if (type === "video") {
+          uploadOptions.chunk_size = 6_000_000;
+        }
 
-    // Extract duration from Cloudinary video response
+        const uploadStream = cloudinary.uploader.upload_stream(
+          uploadOptions,
+          (error, result) => {
+            if (error) {
+              console.error("[Cloudinary] Upload failed:", error.message || error);
+              reject(error);
+            } else {
+              resolve(result!);
+            }
+          }
+        );
+
+        uploadStream.on("error", (err: Error) => {
+          console.error("[Cloudinary] Stream error:", err.message);
+          reject(err);
+        });
+
+        uploadStream.end(buffer);
+      }
+    );
+
+    // For video: extract duration from Cloudinary response
     let duration: number | undefined;
     if (type === "video" && uploadResult.duration) {
       duration = Math.round(uploadResult.duration);
@@ -101,9 +93,10 @@ export async function POST(request: NextRequest) {
       format: uploadResult.format,
     });
   } catch (error) {
-    console.error("Cloudinary upload error:", error);
+    console.error("[Cloudinary] Upload error:", error);
+    const message = error instanceof Error ? error.message : "Gagal mengupload file ke Cloudinary";
     return NextResponse.json(
-      { error: "Gagal mengupload file ke Cloudinary" },
+      { error: message },
       { status: 500 }
     );
   }
