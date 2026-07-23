@@ -1,0 +1,734 @@
+     1→"use client";
+     2→
+     3→import { useState, useEffect, useCallback, useRef } from "react";
+     4→import { useRouter } from "next/navigation";
+     5→import { signOut } from "next-auth/react";
+     6→import type { Video } from "@/types/video";
+     7→import { Button } from "@/components/ui/button";
+     8→import { Input } from "@/components/ui/input";
+     9→import { Label } from "@/components/ui/label";
+    10→import { Textarea } from "@/components/ui/textarea";
+    11→import {
+    12→  Dialog,
+    13→  DialogContent,
+    14→  DialogHeader,
+    15→  DialogTitle,
+    16→} from "@/components/ui/dialog";
+    17→import { Switch } from "@/components/ui/switch";
+    18→import { Badge } from "@/components/ui/badge";
+    19→import { Skeleton } from "@/components/ui/skeleton";
+    20→import {
+    21→  Upload,
+    22→  Trash2,
+    23→  Edit2,
+    24→  Plus,
+    25→  Image as ImageIcon,
+    26→  Film,
+    27→  Eye,
+    28→  Star,
+    29→  Search,
+    30→  Loader2,
+    31→  X,
+    32→  ChevronLeft,
+    33→  Tv,
+    34→  Tag,
+    35→  Clock,
+    36→  LogOut,
+    37→  ShieldCheck,
+    38→} from "lucide-react";
+    39→import { toast } from "sonner";
+    40→import { motion, AnimatePresence } from "framer-motion";
+    41→import Link from "next/link";
+    42→
+    43→function AdminAuthGuard({ children }: { children: React.ReactNode }) {
+    44→  const router = useRouter();
+    45→  const [isChecking, setIsChecking] = useState(true);
+    46→
+    47→  useEffect(() => {
+    48→    async function checkSession() {
+    49→      try {
+    50→        const res = await fetch("/api/auth/session");
+    51→        const data = await res.json();
+    52→        if (!data.authenticated) {
+    53→          router.replace("/admin/login");
+    54→          return;
+    55→        }
+    56→      } catch {
+    57→        router.replace("/admin/login");
+    58→        return;
+    59→      } finally {
+    60→        setIsChecking(false);
+    61→      }
+    62→    }
+    63→    checkSession();
+    64→  }, [router]);
+    65→
+    66→  if (isChecking) {
+    67→    return (
+    68→      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+    69→        <div className="flex flex-col items-center gap-4">
+    70→          <Loader2 className="w-8 h-8 animate-spin text-red-500" />
+    71→          <p className="text-sm text-muted-foreground">Memverifikasi akses...</p>
+    72→        </div>
+    73→      </div>
+    74→    );
+    75→  }
+    76→
+    77→  return <>{children}</>;
+    78→}
+    79→
+    80→function formatDuration(seconds: number): string {
+    81→  const h = Math.floor(seconds / 3600);
+    82→  const m = Math.floor((seconds % 3600) / 60);
+    83→  const s = Math.floor(seconds % 60);
+    84→
+    85→  if (h > 0) {
+    86→    return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    87→  }
+    88→  return `${m}:${String(s).padStart(2, "0")}`;
+    89→}
+    90→
+    91→function detectVideoDuration(file: File): Promise<string | null> {
+    92→  return new Promise((resolve) => {
+    93→    const video = document.createElement("video");
+    94→    video.preload = "metadata";
+    95→    const url = URL.createObjectURL(file);
+    96→
+    97→    video.onloadedmetadata = () => {
+    98→      const duration = formatDuration(video.duration);
+    99→      URL.revokeObjectURL(url);
+   100→      resolve(duration);
+   101→    };
+   102→
+   103→    video.onerror = () => {
+   104→      URL.revokeObjectURL(url);
+   105→      resolve(null);
+   106→    };
+   107→
+   108→    video.src = url;
+   109→  });
+   110→}
+   111→
+   112→function AdminDashboard() {
+   113→  const router = useRouter();
+   114→  const [videos, setVideos] = useState<Video[]>([]);
+   115→  const [isLoading, setIsLoading] = useState(true);
+   116→  const [isFormOpen, setIsFormOpen] = useState(false);
+   117→  const [editingVideo, setEditingVideo] = useState<Video | null>(null);
+   118→  const [searchQuery, setSearchQuery] = useState("");
+   119→  const [isUploading, setIsUploading] = useState(false);
+   120→  const [uploadProgress, setUploadProgress] = useState({ thumbnail: false, video: false });
+   121→  const [detectingDuration, setDetectingDuration] = useState(false);
+   122→  const fileInputRef = useRef<HTMLInputElement>(null);
+   123→
+   124→  // Form state
+   125→  const [form, setForm] = useState({
+   126→    title: "",
+   127→    description: "",
+   128→    category: "",
+   129→    videoUrl: "",
+   130→    thumbnailUrl: "",
+   131→    thumbnailFile: null as File | null,
+   132→    videoFile: null as File | null,
+   133→    duration: "" as string | null,
+   134→    isFeatured: false,
+   135→  });
+   136→
+   137→  // Existing categories for suggestions
+   138→  const existingCategories = [...new Set(videos.map((v) => v.category))].sort();
+   139→
+   140→  const fetchVideos = useCallback(async () => {
+   141→    setIsLoading(true);
+   142→    try {
+   143→      const res = await fetch("/api/videos?limit=100");
+   144→      const data = await res.json();
+   145→      setVideos(data.videos || []);
+   146→    } catch {
+   147→      toast.error("Gagal memuat video");
+   148→    } finally {
+   149→      setIsLoading(false);
+   150→    }
+   151→  }, []);
+   152→
+   153→  useEffect(() => {
+   154→    fetchVideos();
+   155→  }, [fetchVideos]);
+   156→
+   157→  const resetForm = () => {
+   158→    setForm({
+   159→      title: "",
+   160→      description: "",
+   161→      category: "",
+   162→      videoUrl: "",
+   163→      thumbnailUrl: "",
+   164→      thumbnailFile: null,
+   165→      videoFile: null,
+   166→      duration: null,
+   167→      isFeatured: false,
+   168→    });
+   169→    setEditingVideo(null);
+   170→    setUploadProgress({ thumbnail: false, video: false });
+   171→    setDetectingDuration(false);
+   172→  };
+   173→
+   174→  const openCreate = () => {
+   175→    resetForm();
+   176→    setIsFormOpen(true);
+   177→  };
+   178→
+   179→  const openEdit = (video: Video) => {
+   180→    setForm({
+   181→      title: video.title,
+   182→      description: video.description || "",
+   183→      category: video.category,
+   184→      videoUrl: video.videoUrl,
+   185→      thumbnailUrl: video.thumbnailUrl,
+   186→      thumbnailFile: null,
+   187→      videoFile: null,
+   188→      duration: video.duration || null,
+   189→      isFeatured: video.isFeatured,
+   190→    });
+   191→    setEditingVideo(video);
+   192→    setIsFormOpen(true);
+   193→  };
+   194→
+   195→  const handleThumbnailUpload = async (file: File) => {
+   196→    setUploadProgress((prev) => ({ ...prev, thumbnail: true }));
+   197→    toast.info("Mengupload thumbnail ke Cloudinary...");
+   198→    try {
+   199→      const formData = new FormData();
+   200→      formData.append("file", file);
+   201→      formData.append("type", "thumbnail");
+   202→
+   203→      const res = await fetch("/api/upload", { method: "POST", body: formData });
+   204→      const data = await res.json();
+   205→
+   206→      if (data.error) {
+   207→        toast.error(data.error);
+   208→        return;
+   209→      }
+   210→
+   211→      if (data.url) {
+   212→        setForm((prev) => ({ ...prev, thumbnailUrl: data.url, thumbnailFile: file }));
+   213→        toast.success("Thumbnail berhasil diupload ke Cloudinary");
+   214→      }
+   215→    } catch {
+   216→      toast.error("Gagal upload thumbnail ke Cloudinary");
+   217→    } finally {
+   218→      setUploadProgress((prev) => ({ ...prev, thumbnail: false }));
+   219→    }
+   220→  };
+   221→
+   222→  const handleVideoUpload = async (file: File) => {
+   223→    setUploadProgress((prev) => ({ ...prev, video: true }));
+   224→    setDetectingDuration(true);
+   225→    toast.info("Mengupload video ke Cloudinary...");
+   226→
+   227→    try {
+   228→      // Client-side duration detection as fallback
+   229→      const clientDuration = await detectVideoDuration(file);
+   230→      if (clientDuration) {
+   231→        setForm((prev) => ({ ...prev, duration: clientDuration }));
+   232→      }
+   233→
+   234→      const formData = new FormData();
+   235→      formData.append("file", file);
+   236→      formData.append("type", "video");
+   237→
+   238→      const res = await fetch("/api/upload", { method: "POST", body: formData });
+   239→      const data = await res.json();
+   240→
+   241→      if (data.error) {
+   242→        toast.error(data.error);
+   243→        return;
+   244→      }
+   245→
+   246→      if (data.url) {
+   247→        // Use Cloudinary duration if available, otherwise keep client-detected
+   248→        if (data.duration && !clientDuration) {
+   249→          const h = Math.floor(data.duration / 3600);
+   250→          const m = Math.floor((data.duration % 3600) / 60);
+   251→          const s = data.duration % 60;
+   252→          const durStr = h > 0
+   253→            ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+   254→            : `${m}:${String(s).padStart(2, "0")}`;
+   255→          setForm((prev) => ({ ...prev, duration: durStr }));
+   256→        }
+   257→        setForm((prev) => ({ ...prev, videoUrl: data.url, videoFile: file }));
+   258→        toast.success("Video berhasil diupload ke Cloudinary");
+   259→      }
+   260→    } catch {
+   261→      toast.error("Gagal upload video ke Cloudinary");
+   262→    } finally {
+   263→      setUploadProgress((prev) => ({ ...prev, video: false }));
+   264→      setDetectingDuration(false);
+   265→    }
+   266→  };
+   267→
+   268→  const handleSubmit = async (e: React.FormEvent) => {
+   269→    e.preventDefault();
+   270→    setIsUploading(true);
+   271→
+   272→    try {
+   273→      if (form.thumbnailFile) {
+   274→        await handleThumbnailUpload(form.thumbnailFile);
+   275→      }
+   276→      if (form.videoFile) {
+   277→        await handleVideoUpload(form.videoFile);
+   278→      }
+   279→
+   280→      const payload = {
+   281→        title: form.title,
+   282→        description: form.description,
+   283→        category: form.category,
+   284→        videoUrl: form.videoUrl,
+   285→        thumbnailUrl: form.thumbnailUrl || null,
+   286→        duration: form.duration,
+   287→        isFeatured: form.isFeatured,
+   288→      };
+   289→
+   290→      if (editingVideo) {
+   291→        const res = await fetch(`/api/videos/${editingVideo.id}`, {
+   292→          method: "PUT",
+   293→          headers: { "Content-Type": "application/json" },
+   294→          body: JSON.stringify(payload),
+   295→        });
+   296→        if (res.ok) {
+   297→          toast.success("Video berhasil diperbarui");
+   298→          setIsFormOpen(false);
+   299→          fetchVideos();
+   300→        }
+   301→      } else {
+   302→        const res = await fetch("/api/videos", {
+   303→          method: "POST",
+   304→          headers: { "Content-Type": "application/json" },
+   305→          body: JSON.stringify(payload),
+   306→        });
+   307→        if (res.ok) {
+   308→          toast.success("Video berhasil ditambahkan");
+   309→          setIsFormOpen(false);
+   310→          resetForm();
+   311→          fetchVideos();
+   312→        }
+   313→      }
+   314→    } catch {
+   315→      toast.error("Gagal menyimpan video");
+   316→    } finally {
+   317→      setIsUploading(false);
+   318→    }
+   319→  };
+   320→
+   321→  const handleDelete = async (id: string) => {
+   322→    if (!confirm("Yakin ingin menghapus video ini?")) return;
+   323→    try {
+   324→      const res = await fetch(`/api/videos/${id}`, { method: "DELETE" });
+   325→      if (res.ok) {
+   326→        toast.success("Video berhasil dihapus");
+   327→        fetchVideos();
+   328→      }
+   329→    } catch {
+   330→      toast.error("Gagal menghapus video");
+   331→    }
+   332→  };
+   333→
+   334→  const handleLogout = async () => {
+   335→    await signOut({ redirect: false });
+   336→    router.push("/admin/login");
+   337→  };
+   338→
+   339→  const filteredVideos = videos.filter(
+   340→    (v) =>
+   341→      v.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+   342→      v.category.toLowerCase().includes(searchQuery.toLowerCase())
+   343→  );
+   344→
+   345→  return (
+   346→    <div className="min-h-screen bg-[#0a0a0a] text-white">
+   347→      {/* Admin Header */}
+   348→      <header className="sticky top-0 z-50 bg-black/90 backdrop-blur-xl border-b border-white/5">
+   349→        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16">
+   350→          <div className="flex items-center gap-3">
+   351→            <Link
+   352→              href="/"
+   353→              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors"
+   354→            >
+   355→              <ChevronLeft className="w-4 h-4" />
+   356→              Kembali ke Beranda
+   357→            </Link>
+   358→          </div>
+   359→          <div className="flex items-center gap-2 sm:gap-3">
+   360→            <div className="flex items-center gap-2">
+   361→              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-600 to-orange-500 flex items-center justify-center">
+   362→                <Tv className="w-4 h-4 text-white" />
+   363→              </div>
+   364→              <span className="text-sm font-black tracking-tighter bg-gradient-to-r from-red-500 to-orange-400 bg-clip-text text-transparent hidden sm:block">
+   365→                PEKOB
+   366→              </span>
+   367→            </div>
+   368→            <Badge variant="outline" className="border-red-500/30 text-red-400 text-xs">
+   369→              <ShieldCheck className="w-3 h-3 mr-1" />
+   370→              Admin
+   371→            </Badge>
+   372→            <button
+   373→              onClick={handleLogout}
+   374→              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-red-400 hover:bg-red-500/10 border border-white/5 hover:border-red-500/20 transition-all duration-200"
+   375→            >
+   376→              <LogOut className="w-3.5 h-3.5" />
+   377→              <span className="hidden sm:inline">Keluar</span>
+   378→            </button>
+   379→          </div>
+   380→        </div>
+   381→      </header>
+   382→
+   383→      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+   384→        {/* Stats Header */}
+   385→        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+   386→          <div>
+   387→            <h1 className="text-2xl sm:text-3xl font-bold">Kelola Video</h1>
+   388→            <p className="text-sm text-muted-foreground mt-1">
+   389→              {videos.length} video tersedia &middot; {existingCategories.length} kategori
+   390→            </p>
+   391→          </div>
+   392→          <Button
+   393→            onClick={openCreate}
+   394→            className="bg-red-600 hover:bg-red-700 text-white font-semibold gap-2 self-start"
+   395→          >
+   396→            <Plus className="w-4 h-4" />
+   397→            Unggah Video Baru
+   398→          </Button>
+   399→        </div>
+   400→
+   401→        {/* Search */}
+   402→        <div className="relative mb-6 max-w-md">
+   403→          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   404→          <Input
+   405→            placeholder="Cari video..."
+   406→            value={searchQuery}
+   407→            onChange={(e) => setSearchQuery(e.target.value)}
+   408→            className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-muted-foreground focus:border-red-500/50"
+   409→          />
+   410→        </div>
+   411→
+   412→        {/* Video Table/List */}
+   413→        <div className="space-y-3">
+   414→          {isLoading ? (
+   415→            Array.from({ length: 5 }).map((_, i) => (
+   416→              <div
+   417→                key={i}
+   418→                className="flex items-center gap-4 p-3 bg-white/5 rounded-xl"
+   419→              >
+   420→                <Skeleton className="w-32 h-20 rounded-lg bg-white/10" />
+   421→                <div className="flex-1 space-y-2">
+   422→                  <Skeleton className="h-4 w-48 bg-white/10" />
+   423→                  <Skeleton className="h-3 w-32 bg-white/10" />
+   424→                </div>
+   425→              </div>
+   426→            ))
+   427→          ) : filteredVideos.length > 0 ? (
+   428→            <AnimatePresence>
+   429→              {filteredVideos.map((video, index) => (
+   430→                <motion.div
+   431→                  key={video.id}
+   432→                  initial={{ opacity: 0, y: 10 }}
+   433→                  animate={{ opacity: 1, y: 0 }}
+   434→                  exit={{ opacity: 0, x: -20 }}
+   435→                  transition={{ delay: index * 0.03 }}
+   436→                  className="group flex items-center gap-4 p-3 bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 hover:border-white/10 rounded-xl transition-all duration-200"
+   437→                >
+   438→                  {/* Thumbnail */}
+   439→                  <div className="relative w-28 sm:w-36 aspect-video rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
+   440→                    {video.thumbnailUrl ? (
+   441→                      <img
+   442→                        src={video.thumbnailUrl}
+   443→                        alt={video.title}
+   444→                        className="w-full h-full object-cover"
+   445→                      />
+   446→                    ) : (
+   447→                      <div className="w-full h-full bg-gradient-to-br from-red-900/40 via-orange-900/30 to-black flex items-center justify-center">
+   448→                        <Film className="w-5 h-5 text-white/20" />
+   449→                      </div>
+   450→                    )}
+   451→                    {video.isFeatured && (
+   452→                      <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-red-600 rounded text-[9px] font-bold uppercase">
+   453→                        Featured
+   454→                      </div>
+   455→                    )}
+   456→                  </div>
+   457→
+   458→                  {/* Info */}
+   459→                  <div className="flex-1 min-w-0">
+   460→                    <h3 className="text-sm font-semibold text-white line-clamp-1">
+   461→                      {video.title}
+   462→                    </h3>
+   463→                    <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
+   464→                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+   465→                        {video.category || "Tanpa kategori"}
+   466→                      </Badge>
+   467→                      <span className="flex items-center gap-1">
+   468→                        <Eye className="w-3 h-3" />
+   469→                        {video.views.toLocaleString("id-ID")}
+   470→                      </span>
+   471→                      {video.duration && (
+   472→                        <span className="flex items-center gap-1">
+   473→                          <Clock className="w-3 h-3" />
+   474→                          {video.duration}
+   475→                        </span>
+   476→                      )}
+   477→                    </div>
+   478→                  </div>
+   479→
+   480→                  {/* Actions */}
+   481→                  <div className="flex items-center gap-1.5 flex-shrink-0">
+   482→                    <button
+   483→                      onClick={() => openEdit(video)}
+   484→                      className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
+   485→                    >
+   486→                      <Edit2 className="w-3.5 h-3.5" />
+   487→                    </button>
+   488→                    <button
+   489→                      onClick={() => handleDelete(video.id)}
+   490→                      className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
+   491→                    >
+   492→                      <Trash2 className="w-3.5 h-3.5" />
+   493→                    </button>
+   494→                  </div>
+   495→                </motion.div>
+   496→              ))}
+   497→            </AnimatePresence>
+   498→          ) : (
+   499→            <div className="flex flex-col items-center justify-center py-16 text-center">
+   500→              <Film className="w-12 h-12 text-muted-foreground/30 mb-4" />
+   501→              <p className="text-muted-foreground text-sm">
+   502→                {searchQuery
+   503→                  ? "Tidak ada video yang cocok"
+   504→                  : "Belum ada video. Unggah video pertama!"}
+   505→              </p>
+   506→            </div>
+   507→          )}
+   508→        </div>
+   509→      </main>
+   510→
+   511→      {/* Upload/Edit Dialog */}
+   512→      <Dialog open={isFormOpen} onOpenChange={(open) => !open && setIsFormOpen(false)}>
+   513→        <DialogContent className="max-w-lg bg-[#111] border-white/10 text-white max-h-[90vh] overflow-y-auto">
+   514→          <DialogHeader>
+   515→            <DialogTitle className="text-lg font-bold">
+   516→              {editingVideo ? "Edit Video" : "Unggah Video Baru"}
+   517→            </DialogTitle>
+   518→          </DialogHeader>
+   519→
+   520→          <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+   521→            {/* Title */}
+   522→            <div className="space-y-2">
+   523→              <Label htmlFor="title">Judul Video *</Label>
+   524→              <Input
+   525→                id="title"
+   526→                value={form.title}
+   527→                onChange={(e) =>
+   528→                  setForm((prev) => ({ ...prev, title: e.target.value }))
+   529→                }
+   530→                placeholder="Masukkan judul video..."
+   531→                className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground"
+   532→                required
+   533→              />
+   534→            </div>
+   535→
+   536→            {/* Description */}
+   537→            <div className="space-y-2">
+   538→              <Label htmlFor="description">Deskripsi</Label>
+   539→              <Textarea
+   540→                id="description"
+   541→                value={form.description}
+   542→                onChange={(e) =>
+   543→                  setForm((prev) => ({ ...prev, description: e.target.value }))
+   544→                }
+   545→                placeholder="Deskripsi singkat video..."
+   546→                rows={3}
+   547→                className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground resize-none"
+   548→              />
+   549→            </div>
+   550→
+   551→            {/* Category */}
+   552→            <div className="space-y-2">
+   553→              <Label htmlFor="category">
+   554→                <span className="flex items-center gap-1.5">
+   555→                  <Tag className="w-3.5 h-3.5" />
+   556→                  Kategori *
+   557→                </span>
+   558→              </Label>
+   559→              <Input
+   560→                id="category"
+   561→                list="category-suggestions"
+   562→                value={form.category}
+   563→                onChange={(e) =>
+   564→                  setForm((prev) => ({ ...prev, category: e.target.value }))
+   565→                }
+   566→                placeholder="Ketik kategori baru atau pilih yang ada..."
+   567→                className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground"
+   568→                required
+   569→              />
+   570→              {existingCategories.length > 0 && (
+   571→                <datalist id="category-suggestions">
+   572→                  {existingCategories.map((cat) => (
+   573→                    <option key={cat} value={cat} />
+   574→                  ))}
+   575→                </datalist>
+   576→              )}
+   577→              <p className="text-xs text-muted-foreground">
+   578→                Ketik kategori bebas, contoh: Film, Musik, Komedi, Gaming, dll.
+   579→              </p>
+   580→            </div>
+   581→
+   582→            {/* Thumbnail Upload */}
+   583→            <div className="space-y-2">
+   584→              <Label>Thumbnail (opsional)</Label>
+   585→              <div className="flex items-center gap-3">
+   586→                {form.thumbnailUrl ? (
+   587→                  <div className="relative w-24 h-14 rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
+   588→                    <img
+   589→                      src={form.thumbnailUrl}
+   590→                      alt="Thumbnail"
+   591→                      className="w-full h-full object-cover"
+   592→                    />
+   593→                    <button
+   594→                      type="button"
+   595→                      onClick={() =>
+   596→                        setForm((prev) => ({
+   597→                          ...prev,
+   598→                          thumbnailUrl: "",
+   599→                          thumbnailFile: null,
+   600→                        }))
+   601→                      }
+   602→                      className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/80 flex items-center justify-center"
+   603→                    >
+   604→                      <X className="w-3 h-3" />
+   605→                    </button>
+   606→                  </div>
+   607→                ) : null}
+   608→                <label className="flex-1 cursor-pointer">
+   609→                  <div className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-white/10 rounded-lg hover:border-white/20 hover:bg-white/5 transition-colors">
+   610→                    {uploadProgress.thumbnail ? (
+   611→                      <Loader2 className="w-4 h-4 animate-spin text-red-400" />
+   612→                    ) : (
+   613→                      <ImageIcon className="w-4 h-4 text-muted-foreground" />
+   614→                    )}
+   615→                    <span className="text-xs text-muted-foreground">
+   616→                      {form.thumbnailUrl ? "Ganti thumbnail" : "Upload thumbnail ke Cloudinary"}
+   617→                    </span>
+   618→                  </div>
+   619→                  <input
+   620→                    ref={fileInputRef}
+   621→                    type="file"
+   622→                    accept="image/*"
+   623→                    className="hidden"
+   624→                    onChange={(e) => {
+   625→                      const file = e.target.files?.[0];
+   626→                      if (file) {
+   627→                        setForm((prev) => ({ ...prev, thumbnailFile: file }));
+   628→                      }
+   629→                    }}
+   630→                  />
+   631→                </label>
+   632→              </div>
+   633→            </div>
+   634→
+   635→            {/* Video Upload or URL */}
+   636→            <div className="space-y-2">
+   637→              <Label>Video (File atau URL) *</Label>
+   638→              <Input
+   639→                value={form.videoUrl}
+   640→                onChange={(e) =>
+   641→                  setForm((prev) => ({ ...prev, videoUrl: e.target.value }))
+   642→                }
+   643→                placeholder="Upload file video atau masukkan URL YouTube/external"
+   644→                className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground"
+   645→              />
+   646→              <label className="block cursor-pointer">
+   647→                <div className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-white/10 rounded-lg hover:border-white/20 hover:bg-white/5 transition-colors">
+   648→                  {uploadProgress.video ? (
+   649→                    <Loader2 className="w-4 h-4 animate-spin text-red-400" />
+   650→                  ) : (
+   651→                    <Upload className="w-4 h-4 text-muted-foreground" />
+   652→                  )}
+   653→                  <span className="text-xs text-muted-foreground">
+   654→                    {form.videoFile
+   655→                      ? form.videoFile.name
+   656→                      : "Upload file video ke Cloudinary (maks 100MB)"}
+   657→                  </span>
+   658→                </div>
+   659→                <input
+   660→                  type="file"
+   661→                  accept="video/*"
+   662→                  className="hidden"
+   663→                  onChange={(e) => {
+   664→                    const file = e.target.files?.[0];
+   665→                    if (file) {
+   666→                      setForm((prev) => ({ ...prev, videoFile: file }));
+   667→                    }
+   668→                  }}
+   669→                />
+   670→              </label>
+   671→            </div>
+   672→
+   673→            {/* Duration indicator */}
+   674→            {form.duration && (
+   675→              <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
+   676→                <Clock className="w-4 h-4 text-green-400" />
+   677→                <span className="text-sm text-green-400">
+   678→                  Durasi terdeteksi otomatis: {form.duration}
+   679→                </span>
+   680→              </div>
+   681→            )}
+   682→
+   683→            {/* Featured Toggle */}
+   684→            <div className="flex items-center justify-between py-2">
+   685→              <div className="flex items-center gap-2">
+   686→                <Star className="w-4 h-4 text-yellow-500" />
+   687→                <Label>Jadikan Video Unggulan (Featured)</Label>
+   688→              </div>
+   689→              <Switch
+   690→                checked={form.isFeatured}
+   691→                onCheckedChange={(checked) =>
+   692→                  setForm((prev) => ({ ...prev, isFeatured: checked }))
+   693→                }
+   694→              />
+   695→            </div>
+   696→
+   697→            {/* Submit */}
+   698→            <div className="flex gap-3 pt-2">
+   699→              <Button
+   700→                type="button"
+   701→                variant="ghost"
+   702→                onClick={() => setIsFormOpen(false)}
+   703→                className="text-muted-foreground hover:text-white"
+   704→              >
+   705→                Batal
+   706→              </Button>
+   707→              <Button
+   708→                type="submit"
+   709→                disabled={isUploading || !form.title || !form.videoUrl || !form.category}
+   710→                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold gap-2"
+   711→              >
+   712→                {isUploading ? (
+   713→                  <Loader2 className="w-4 h-4 animate-spin" />
+   714→                ) : (
+   715→                  <Upload className="w-4 h-4" />
+   716→                )}
+   717→                {editingVideo ? "Perbarui Video" : "Unggah Video"}
+   718→              </Button>
+   719→            </div>
+   720→          </form>
+   721→        </DialogContent>
+   722→      </Dialog>
+   723→    </div>
+   724→  );
+   725→}
+   726→
+   727→export default function AdminPage() {
+   728→  return (
+   729→    <AdminAuthGuard>
+   730→      <AdminDashboard />
+   731→    </AdminAuthGuard>
+   732→  );
+   733→}
+   734→
