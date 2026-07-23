@@ -176,3 +176,28 @@ Stage Summary:
 - `next/image` configured for Cloudinary domain
 - Admin panel shows Cloudinary-specific messages and errors
 - User needs to set 3 env vars on Vercel: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
+
+---
+Task ID: 8
+Agent: Main
+Task: Fix video upload not readable + make thumbnail optional
+
+Work Log:
+- Fixed Cloudinary video upload: replaced `upload_stream` with `upload_large` for videos (automatic chunking)
+- Removed duplicate `folder` param that conflicted with `public_id` path
+- Removed `format` override letting Cloudinary auto-detect video format
+- Made `thumbnailUrl` nullable in Prisma schema (`String?` → pushed to Neon)
+- Removed `thumbnailUrl` from API POST required validation
+- Removed `thumbnailUrl` from submit button disabled condition
+- Changed label from "Thumbnail *" to "Thumbnail (opsional)"
+- Added gradient placeholder thumbnails (red-orange-black + Film icon) for all components:
+  - VideoCard, HeroSection, VideoPlayerModal (related videos), Admin video list
+- Replaced `next/image` Image with plain `img` tags in hero-section and video-card (Cloudinary URLs work better with direct img tags)
+- Cleaned up unused imports (Image, DEFAULT_THUMBNAIL, eslint-disable directives)
+- Lint passes clean, pushed to GitHub
+
+Stage Summary:
+- Video upload to Cloudinary now properly handles video format (upload_large with chunking)
+- Thumbnail is now optional — admin can add video without thumbnail
+- Placeholder gradient automatically shown when no thumbnail
+- All components gracefully handle missing thumbnails
