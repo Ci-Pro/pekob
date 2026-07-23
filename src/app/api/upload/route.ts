@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import cloudinary from "@/lib/cloudinary";
 
+// Extend serverless function timeout to 120s for Cloudinary processing
+export const maxDuration = 120;
+
 // Supported video extensions (used when MIME type is empty/unrecognized — common on mobile)
 const VIDEO_EXTENSIONS = new Set([
   "mp4", "m4v", "3gp", "3g2", "webm", "mov", "avi", "mkv", "wmv",

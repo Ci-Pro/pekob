@@ -118,11 +118,12 @@ export function VideoPlayerModal() {
   });
 
   // Determine how to render the video
+  // If videoSource === "embed", videoUrl is already a valid <iframe src="..."> URL
+  // Otherwise, try to detect if it's a legacy YouTube/etc URL saved before embed support
   const isEmbed = selectedVideo.videoSource === "embed";
-  const embedUrl = isEmbed ? getEmbedUrl(selectedVideo.videoUrl) : null;
-  // Also detect legacy YouTube URLs that were saved as "upload" source
-  const legacyYoutubeEmbed = !isEmbed ? getEmbedUrl(selectedVideo.videoUrl) : null;
-  const finalEmbedUrl = embedUrl || legacyYoutubeEmbed;
+  const directEmbedUrl = isEmbed ? selectedVideo.videoUrl : null;
+  const legacyEmbedUrl = !isEmbed ? getEmbedUrl(selectedVideo.videoUrl) : null;
+  const finalEmbedUrl = directEmbedUrl || legacyEmbedUrl;
 
   return (
     <AnimatePresence>

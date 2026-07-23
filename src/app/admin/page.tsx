@@ -52,12 +52,12 @@ const EMBED_PROVIDERS: { name: string; pattern: RegExp; embedUrl: (id: string) =
   },
   {
     name: "Vimeo",
-    pattern: /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(?:video\/)?(\d+)/,
+    pattern: /(?:https?:\/\/)?(?:www\.|player\.)?vimeo\.com\/(?:video\/)?(\d+)/,
     embedUrl: (id) => `https://player.vimeo.com/video/${id}?autoplay=1`,
   },
   {
     name: "Dailymotion",
-    pattern: /(?:https?:\/\/)?(?:www\.)?dailymotion\.com\/video\/([a-zA-Z0-9]+)/,
+    pattern: /(?:https?:\/\/)?(?:www\.)?(?:dailymotion\.com\/(?:embed\/)?video\/|dai\.ly\/)([a-zA-Z0-9]+)/,
     embedUrl: (id) => `https://www.dailymotion.com/embed/video/${id}?autoplay=1`,
   },
   {
@@ -316,14 +316,34 @@ function AdminDashboard() {
         setForm((prev) => ({ ...prev, duration: clientDuration }));
       }
 
-      // Use XMLHttpRequest for upload progress tracking
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("type", "video");
+      // ── Direct client-to-Cloudinary upload (bypasses server timeout) ──
+      // Fetch Cloudinary config
+      const configRes = await fetch("/api/cloudinary-config");
+      const config = await configRes.json();
 
-      const result = await new Promise<{ url: string; duration?: number; error?: string }>((resolve, reject) => {
+      if (config.error) {
+        throw new Error("Cloudinary belum dikonfigurasi");
+      }
+
+      const resourceType = "video";
+      const cloudUploadUrl = `${config.uploadUrl}/${resourceType}/upload`;
+
+      const result = await new Promise<{
+        secure_url: string;
+        duration?: number;
+        public_id: string;
+        format?: string;
+        error?: { message?: string };
+      }>((resolve, reject) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("upload_preset", config.uploadPreset);
+        formData.append("folder", "pekob/videos");
+        formData.append("resource_type", resourceType);
+
         const xhr = new XMLHttpRequest();
 
+        // Track REAL upload progress to Cloudinary (not just to server)
         xhr.upload.addEventListener("progress", (e) => {
           if (e.lengthComputable) {
             const pct = Math.round((e.loaded / e.total) * 100);
@@ -334,19 +354,24 @@ function AdminDashboard() {
         xhr.addEventListener("load", () => {
           try {
             const data = JSON.parse(xhr.responseText);
-            if (data.error) reject(new Error(data.error));
-            else resolve(data);
+            if (data.error) {
+              reject(new Error(data.error.message || "Cloudinary upload gagal"));
+            } else {
+              resolve(data);
+            }
           } catch {
-            reject(new Error("Gagal memproses respons server"));
+            reject(new Error("Gagal memproses respons Cloudinary"));
           }
         });
 
-        xhr.addEventListener("error", () => reject(new Error("Gagal upload video")));
-        xhr.open("POST", "/api/upload");
+        xhr.addEventListener("error", () => reject(new Error("Gagal upload video ke Cloudinary")));
+        xhr.addEventListener("timeout", () => reject(new Error("Upload timeout — file terlalu besar atau koneksi lambat")));
+        xhr.timeout = 600000; // 10 minute timeout for large videos
+        xhr.open("POST", cloudUploadUrl);
         xhr.send(formData);
       });
 
-      if (result.url) {
+      if (result.secure_url) {
         // Use Cloudinary duration if available, otherwise keep client-detected
         if (result.duration && !clientDuration) {
           const h = Math.floor(result.duration / 3600);
@@ -357,7 +382,7 @@ function AdminDashboard() {
             : `${m}:${String(s).padStart(2, "0")}`;
           setForm((prev) => ({ ...prev, duration: durStr }));
         }
-        setForm((prev) => ({ ...prev, videoUrl: result.url, videoFile: file }));
+        setForm((prev) => ({ ...prev, videoUrl: result.secure_url, videoFile: file }));
         toast.success("Video berhasil diupload ke Cloudinary");
       }
     } catch (err) {
@@ -368,8 +393,16 @@ function AdminDashboard() {
     }
   };
 
-  // Handle embed URL input change
-  const handleEmbedUrlChange = (url: string) => {
+  // Handle embed URL input change — also detect raw <iframe src="..."> paste
+  const handleEmbedUrlChange = (raw: string) => {
+    let url = raw.trim();
+
+    // If user pasted raw <iframe src="URL" ...>, extract the URL
+    const iframeMatch = url.match(/<iframe[^>]+src=["']([^"']+)["'][^>]*>/i);
+    if (iframeMatch) {
+      url = iframeMatch[1];
+    }
+
     setForm((prev) => ({ ...prev, embedUrl: url }));
     const info = detectEmbedUrl(url);
     setEmbedInfo(info);
@@ -395,14 +428,18 @@ function AdminDashboard() {
       let finalVideoSource = "upload";
 
       if (videoInputMode === "embed" && form.embedUrl) {
-        finalVideoUrl = form.embedUrl;
+        // Convert share URL to embed URL for storage
+        let embedSrc = form.embedUrl;
+        if (embedInfo && embedInfo.embedUrl) {
+          embedSrc = embedInfo.embedUrl;
+        }
+        finalVideoUrl = embedSrc;
         finalVideoSource = "embed";
+
         // Auto-generate thumbnail from embed if no thumbnail set
         if (!form.thumbnailUrl) {
-          // Try to get YouTube thumbnail
           const ytMatch = form.embedUrl.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
           if (ytMatch) {
-            finalVideoUrl = `https://www.youtube.com/watch?v=${ytMatch[1]}`;
             setForm((prev) => ({
               ...prev,
               thumbnailUrl: `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`,
@@ -880,18 +917,29 @@ function AdminDashboard() {
                       id="embedUrl"
                       value={form.embedUrl}
                       onChange={(e) => handleEmbedUrlChange(e.target.value)}
-                      placeholder="https://www.youtube.com/watch?v=...  atau  https://vimeo.com/..."
+                      placeholder='Paste URL YouTube, Vimeo, dll. — atau paste langsung <iframe src="...">'
                       className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground text-sm"
                     />
                   </div>
 
                   {/* Embed provider detection */}
                   {embedInfo && (
-                    <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
-                      <Check className="w-4 h-4 text-green-400" />
-                      <span className="text-xs text-green-400">
-                        Terdeteksi: <strong>{embedInfo.provider}</strong> — ID: {embedInfo.id}
-                      </span>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
+                        <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
+                        <span className="text-xs text-green-400">
+                          Terdeteksi: <strong>{embedInfo.provider}</strong>
+                        </span>
+                      </div>
+                      {/* Show the actual iframe src URL that will be used */}
+                      <div className="px-3 py-2 bg-white/[0.03] border border-white/5 rounded-lg">
+                        <p className="text-[10px] text-muted-foreground mb-1 font-medium">
+                          iframe src yang akan digunakan:
+                        </p>
+                        <code className="block text-[10px] text-orange-400 break-all leading-relaxed">
+                          {embedInfo.embedUrl}
+                        </code>
+                      </div>
                     </div>
                   )}
 
