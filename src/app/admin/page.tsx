@@ -238,6 +238,8 @@ function AdminDashboard() {
     thumbnailUrl: "",
     thumbnailFile: null as File | null,
     videoFile: null as File | null,
+    videoFileName: "" as string,   // Keep filename after upload for display
+    videoFileSize: 0 as number,   // Keep filesize after upload for display
     duration: "" as string | null,
     isFeatured: false,
   });
@@ -278,6 +280,8 @@ function AdminDashboard() {
       thumbnailUrl: "",
       thumbnailFile: null,
       videoFile: null,
+      videoFileName: "",
+      videoFileSize: 0,
       duration: null,
       isFeatured: false,
     });
@@ -306,6 +310,8 @@ function AdminDashboard() {
       thumbnailUrl: video.thumbnailUrl,
       thumbnailFile: null,
       videoFile: null,
+      videoFileName: "",
+      videoFileSize: 0,
       duration: video.duration || null,
       isFeatured: video.isFeatured,
     });
@@ -338,12 +344,17 @@ function AdminDashboard() {
       const config = await configRes.json();
       if (config.error) throw new Error("Cloudinary belum dikonfigurasi");
 
-      const cloudUploadUrl = `${config.uploadUrl}/image/upload`;
+      console.log("[Thumbnail] Starting upload:", file.name, file.size, "type:", file.type);
+      console.log("[Thumbnail] Config:", { cloudName: config.cloudName, preset: config.uploadPreset });
+
+      // Use /auto/upload so Cloudinary auto-detects resource type (image vs video)
+      const cloudUploadUrl = `${config.uploadUrl}/auto/upload`;
 
       const result = await new Promise<{
         secure_url: string;
         public_id: string;
         format?: string;
+        resource_type?: string;
         error?: { message?: string };
       }>((resolve, reject) => {
         const formData = new FormData();
@@ -354,29 +365,43 @@ function AdminDashboard() {
         const xhr = new XMLHttpRequest();
         xhr.addEventListener("load", () => {
           try {
+            console.log("[Thumbnail] XHR status:", xhr.status);
             const data = JSON.parse(xhr.responseText);
+            console.log("[Thumbnail] Response:", JSON.stringify(data).substring(0, 200));
             if (data.error) {
               reject(new Error(data.error.message || "Cloudinary upload gagal"));
             } else {
               resolve(data);
             }
-          } catch {
+          } catch (parseErr) {
+            console.error("[Thumbnail] Parse error:", parseErr);
+            console.error("[Thumbnail] Raw response:", xhr.responseText);
             reject(new Error("Gagal memproses respons Cloudinary"));
           }
         });
-        xhr.addEventListener("error", () => reject(new Error("Gagal upload thumbnail ke Cloudinary")));
-        xhr.addEventListener("timeout", () => reject(new Error("Upload timeout — koneksi lambat")));
+        xhr.addEventListener("error", () => {
+          console.error("[Thumbnail] XHR network error");
+          reject(new Error("Gagal upload thumbnail ke Cloudinary (network error)"));
+        });
+        xhr.addEventListener("timeout", () => {
+          console.error("[Thumbnail] XHR timeout");
+          reject(new Error("Upload timeout — koneksi lambat"));
+        });
         xhr.timeout = 60000; // 1 minute timeout for images
         xhr.open("POST", cloudUploadUrl);
         xhr.send(formData);
       });
 
       if (result.secure_url) {
+        console.log("[Thumbnail] Upload success:", result.secure_url);
         setForm((prev) => ({ ...prev, thumbnailUrl: result.secure_url, thumbnailFile: null }));
-        toast.success("Thumbnail berhasil diupload");
+        toast.success("Thumbnail berhasil diupload ke Cloudinary");
         return result.secure_url;
+      } else {
+        console.error("[Thumbnail] No secure_url in result:", result);
       }
     } catch (err) {
+      console.error("[Thumbnail] Upload error:", err);
       toast.error(err instanceof Error ? err.message : "Gagal upload thumbnail ke Cloudinary");
     } finally {
       setUploadProgress((prev) => ({ ...prev, thumbnail: false }));
@@ -481,7 +506,9 @@ function AdminDashboard() {
         setForm((prev) => ({
           ...prev,
           videoUrl: result.secure_url,
-          videoFile: file,
+          videoFile: null, // Clear file ref — video already uploaded to Cloudinary
+          videoFileName: file.name,   // Keep name for display
+          videoFileSize: file.size,   // Keep size for display
           ...(autoThumb && !prev.thumbnailUrl ? { thumbnailUrl: autoThumb } : {}),
         }));
         toast.success("Video berhasil diupload ke Cloudinary");
@@ -926,7 +953,7 @@ function AdminDashboard() {
                     className={`relative border-2 border-dashed rounded-lg transition-all duration-200 ${
                       videoDragOver
                         ? "border-red-500 bg-red-500/10"
-                        : form.videoUrl && form.videoFile
+                        : form.videoUrl
                         ? "border-green-500/30 bg-green-500/5"
                         : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"
                     }`}
@@ -964,7 +991,7 @@ function AdminDashboard() {
                             <Loader2 className="w-5 h-5 animate-spin text-red-400" />
                             <div className="w-full max-w-xs">
                               <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                                <span>Mengupload {form.videoFile?.name}...</span>
+                                <span>Mengupload {form.videoFileName || form.videoFile?.name}...</span>
                                 <span>{uploadProgress.percent}%</span>
                               </div>
                               <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
@@ -977,15 +1004,15 @@ function AdminDashboard() {
                               </div>
                             </div>
                           </>
-                        ) : form.videoUrl && form.videoFile ? (
+                        ) : form.videoUrl ? (
                           <>
                             <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
                               <Film className="w-4 h-4 text-green-400" />
                             </div>
                             <div className="text-center">
-                              <p className="text-xs text-green-400 font-medium">{form.videoFile.name}</p>
+                              <p className="text-xs text-green-400 font-medium">{form.videoFileName || "Video"}</p>
                               <p className="text-xs text-muted-foreground">
-                                {(form.videoFile.size / (1024 * 1024)).toFixed(1)} MB
+                                {form.videoFileSize > 0 ? `${(form.videoFileSize / (1024 * 1024)).toFixed(1)} MB` : "Sudah diupload"}
                               </p>
                             </div>
                             <p className="text-xs text-muted-foreground/60">Klik atau seret untuk ganti file</p>
