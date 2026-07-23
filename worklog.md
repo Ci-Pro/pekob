@@ -373,3 +373,42 @@ Stage Summary:
 - Loading indicator shows on thumbnail preview during upload
 - Mobile compatible: extension-based validation fallback for empty MIME types
 - ESLint: 0 errors, pushed to GitHub
+
+---
+Task ID: 1
+Agent: main
+Task: Remove "Dibuat dengan di Indonesia" text from footer
+
+Work Log:
+- Read footer.tsx and identified the credit section at lines 27-32
+- Removed the credit section containing Heart icon, "Dibuat dengan", Film icon, "di Indonesia"
+- Removed unused imports (Heart, Film) from lucide-react
+- Footer now only shows Brand + Copyright
+
+Stage Summary:
+- Footer is clean with only logo/brand and copyright text
+- Lint passes with 0 errors
+
+---
+Task ID: 2
+Agent: main
+Task: Fix mobile menu - replace transparent search dropdown with proper Sheet navigation panel
+
+Work Log:
+- Analyzed the old mobile menu: it was a simple dropdown (div) that only contained a search input with `bg-white/[0.04]` (very transparent)
+- Replaced the dropdown with a shadcn/ui Sheet component (slide-in panel from left)
+- The new mobile menu includes:
+  - Sheet with solid dark background (`bg-[#0f0f0f]`) - no transparency
+  - Header with PEKOB logo and branding
+  - Search bar with proper styling (`bg-white/[0.06]`, rounded-xl)
+  - Navigation links: Beranda (with Home icon) and Trending (with Flame icon)
+  - Dynamic categories from the video store
+  - Footer copyright text inside the sheet
+- Mobile menu auto-closes when a category or nav link is clicked
+- Added `MobileNavLink` component with active state styling (red accent, indicator dot)
+- Mobile hamburger button now opens the Sheet (was toggling a simple dropdown before)
+
+Stage Summary:
+- Mobile menu is now a professional slide-in panel instead of a transparent search dropdown
+- Solid dark background, proper navigation structure with categories
+- Lint passes with 0 errors

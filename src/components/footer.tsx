@@ -1,6 +1,6 @@
 "use client";
 
-import { Tv, Heart, Film } from "lucide-react";
+import { Tv } from "lucide-react";
 import Link from "next/link";
 
 export function Footer() {
@@ -22,14 +22,6 @@ export function Footer() {
           <p className="text-[11px] text-muted-foreground/60">
             © {new Date().getFullYear()} PEKOB. Semua hak dilindungi.
           </p>
-
-          {/* Credit */}
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
-            <Heart className="w-3 h-3 text-red-500/70" />
-            <span>Dibuat dengan</span>
-            <Film className="w-3 h-3 text-red-500/70" />
-            <span>di Indonesia</span>
-          </div>
         </div>
       </div>
     </footer>
