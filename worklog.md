@@ -347,3 +347,29 @@ Stage Summary:
 - All components show auto thumbnails: VideoCard, HeroSection, RelatedVideoItem, Admin video list
 - No more "Embed" text/badge on public pages — embed videos look identical to uploaded videos
 - ESLint: 0 errors, homepage compiles 200
+
+---
+Task ID: 13
+Agent: Main
+Task: Fix thumbnail upload validation — not working for both upload and embed modes
+
+Work Log:
+- Diagnosed 3 bugs in thumbnail upload flow:
+  1. handleThumbnailUpload only called inside `if (videoInputMode === "upload")` — embed mode never uploaded thumbnails
+  2. React state timing bug: setForm() is async, but form.thumbnailUrl was read immediately after for payload — always got stale value
+  3. No instant preview when selecting thumbnail file — user couldn't see the image before form submit
+- Fixed handleThumbnailUpload to return URL (Promise<string | null>) instead of void
+- Created handleThumbnailSelect: uploads immediately on file select + shows blob URL preview + replaces with Cloudinary URL when done
+- Moved thumbnail upload in handleSubmit out of the upload-only block — now runs for BOTH upload and embed modes
+- Fixed payload building: uses thumbUploadResult (return value) > form.thumbnailUrl (already uploaded) > null; filters out blob: URLs
+- Added loading spinner overlay on thumbnail preview image during upload
+- Added extension-based validation for thumbnail drag & drop (mobile compatible when MIME type is empty)
+- isImageFile in upload route: added comment clarifying extension fallback for mobile
+
+Stage Summary:
+- Thumbnail upload now works for BOTH upload and embed video modes
+- React state timing bug fixed — thumbnail URL properly saved to database
+- Instant preview: user sees selected image immediately as blob URL, then Cloudinary URL replaces it
+- Loading indicator shows on thumbnail preview during upload
+- Mobile compatible: extension-based validation fallback for empty MIME types
+- ESLint: 0 errors, pushed to GitHub
