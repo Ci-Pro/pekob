@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 import type { Video } from "@/types/video";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,10 +33,49 @@ import {
   Tv,
   Tag,
   Clock,
+  LogOut,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+
+function AdminAuthGuard({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const [isChecking, setIsChecking] = useState(true);
+
+  useEffect(() => {
+    async function checkSession() {
+      try {
+        const res = await fetch("/api/auth/session");
+        const data = await res.json();
+        if (!data.authenticated) {
+          router.replace("/admin/login");
+          return;
+        }
+      } catch {
+        router.replace("/admin/login");
+        return;
+      } finally {
+        setIsChecking(false);
+      }
+    }
+    checkSession();
+  }, [router]);
+
+  if (isChecking) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-red-500" />
+          <p className="text-sm text-muted-foreground">Memverifikasi akses...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
 
 function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -68,7 +109,8 @@ function detectVideoDuration(file: File): Promise<string | null> {
   });
 }
 
-export default function AdminPage() {
+function AdminDashboard() {
+  const router = useRouter();
   const [videos, setVideos] = useState<Video[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -176,7 +218,6 @@ export default function AdminPage() {
     setDetectingDuration(true);
 
     try {
-      // Auto-detect duration from video file
       const duration = await detectVideoDuration(file);
       if (duration) {
         setForm((prev) => ({ ...prev, duration }));
@@ -207,7 +248,6 @@ export default function AdminPage() {
     setIsUploading(true);
 
     try {
-      // Upload files first if present
       if (form.thumbnailFile) {
         await handleThumbnailUpload(form.thumbnailFile);
       }
@@ -269,6 +309,11 @@ export default function AdminPage() {
     }
   };
 
+  const handleLogout = async () => {
+    await signOut({ redirect: false });
+    router.push("/admin/login");
+  };
+
   const filteredVideos = videos.filter(
     (v) =>
       v.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -289,7 +334,7 @@ export default function AdminPage() {
               Kembali ke Beranda
             </Link>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-600 to-orange-500 flex items-center justify-center">
                 <Tv className="w-4 h-4 text-white" />
@@ -299,8 +344,16 @@ export default function AdminPage() {
               </span>
             </div>
             <Badge variant="outline" className="border-red-500/30 text-red-400 text-xs">
-              Admin Panel
+              <ShieldCheck className="w-3 h-3 mr-1" />
+              Admin
             </Badge>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-red-400 hover:bg-red-500/10 border border-white/5 hover:border-red-500/20 transition-all duration-200"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Keluar</span>
+            </button>
           </div>
         </div>
       </header>
@@ -467,7 +520,7 @@ export default function AdminPage() {
               />
             </div>
 
-            {/* Category - Manual Input with Suggestions */}
+            {/* Category */}
             <div className="space-y-2">
               <Label htmlFor="category">
                 <span className="flex items-center gap-1.5">
@@ -559,7 +612,7 @@ export default function AdminPage() {
                 onChange={(e) =>
                   setForm((prev) => ({ ...prev, videoUrl: e.target.value }))
                 }
-                placeholder="Upload file atau masukkan URL video (YouTube, dll)"
+                placeholder="Upload file atau masukkan URL video"
                 className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground"
               />
               <label className="block cursor-pointer">
@@ -589,7 +642,7 @@ export default function AdminPage() {
               </label>
             </div>
 
-            {/* Duration - Auto detected indicator */}
+            {/* Duration indicator */}
             {form.duration && (
               <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
                 <Clock className="w-4 h-4 text-green-400" />
@@ -640,5 +693,13 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function AdminPage() {
+  return (
+    <AdminAuthGuard>
+      <AdminDashboard />
+    </AdminAuthGuard>
   );
 }

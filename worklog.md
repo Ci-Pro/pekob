@@ -70,3 +70,32 @@ Stage Summary:
 - Polling is smart: only full refetch when version changes, pauses when browser tab hidden
 - Production-ready: Neon serverless driver with connection pool for Vercel serverless functions
 - User needs to: create Neon DB → set DATABASE_URL in Vercel env → deploy
+
+---
+Task ID: 4
+Agent: Main
+Task: Implement admin login and authentication
+
+Work Log:
+- Installed `bcryptjs` (v3.0.3) + `@types/bcryptjs` for password hashing
+- Added `Admin` model to Prisma schema (id, username, password, createdAt)
+- Pushed schema and seeded default admin: username=`admin`, password=`admin123` (bcrypt hashed)
+- Created `src/lib/auth.ts`: NextAuth config with CredentialsProvider, JWT session strategy, 24h maxAge
+- Created `src/app/api/auth/[...nextauth]/route.ts`: NextAuth API route handler
+- Created `src/app/api/auth/session/route.ts`: custom session check endpoint for client-side use
+- Created `src/app/admin/login/page.tsx`: cinematic login page with PEKOB branding, red/orange gradients, form validation, show/hide password toggle
+- Created `src/components/providers.tsx`: client-side SessionProvider wrapper
+- Updated `src/app/layout.tsx`: wrapped with Providers component
+- Updated `src/app/admin/page.tsx`: wrapped with `AdminAuthGuard` (checks `/api/auth/session`, redirects to login if not authenticated), added logout button with `signOut()`
+- Removed `src/middleware.ts`: Next.js 16 deprecated middleware causing server crashes; auth guard works via client-side component
+- Updated `.env` with `NEXTAUTH_SECRET`
+- Lint passes clean
+- API verification: login page 200, session API works, credentials auth returns 302 on success
+
+Stage Summary:
+- Full admin authentication implemented with NextAuth.js v4 credentials provider
+- Login page: `/admin/login` with cinematic dark UI matching PEKOB theme
+- Admin panel protected: unauthenticated users see "Memverifikasi akses..." then redirect to login
+- Logout button in admin header signs out and redirects to login
+- Default credentials: admin / admin123 (change before production!)
+- JWT-based sessions with 24-hour expiry

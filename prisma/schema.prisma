@@ -3,9 +3,26 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
+  provider  = "sqlite"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+// ── For Neon PostgreSQL (production on Vercel) ──────────────────
+// Uncomment below + comment out the sqlite datasource above
+// when deploying to Vercel with Neon database.
+//
+// datasource db {
+//   provider  = "postgresql"
+//   url       = env("DATABASE_URL")
+//   directUrl = env("DIRECT_DATABASE_URL")
+// }
+// ────────────────────────────────────────────────────────────────
+
+model Admin {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String
+  createdAt DateTime @default(now())
 }
 
 model Video {
