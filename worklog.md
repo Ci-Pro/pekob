@@ -322,3 +322,28 @@ Stage Summary:
 - DB schema updated with `videoSource` field
 - All API routes updated to handle new field
 - Video player enhanced with multi-provider embed rendering
+
+---
+Task ID: 12
+Agent: Main
+Task: Auto thumbnail from video first frame, embed thumbnail validation, remove embed text from public page
+
+Work Log:
+- Fixed `generateAutoThumbnail()` in admin/page.tsx: added `so_0` (start offset 0) to Cloudinary video thumbnail URL to grab first frame, fixed regex to properly strip extension, added Vimeo player URL pattern support, added quality optimization `q_auto`
+- Fixed critical React state timing bug in `handleSubmit`: `setForm()` for auto thumbnail was async and didn't reflect in payload. Changed to compute `finalThumbnailUrl` synchronously before building payload.
+- Added fallback auto-thumbnail generation for uploaded videos in `handleSubmit` (covers case where video upload didn't set auto-thumb)
+- Updated `getAutoThumbnail()` in video-card.tsx: same `so_0` first frame fix with proper regex
+- Updated hero-section.tsx: added `getAutoThumbnail()` function for Cloudinary first frame + YouTube maxresdefault + Vimeo thumbnail. Hero now shows auto thumbnail when DB thumbnailUrl is null.
+- Updated RelatedVideoItem in video-player-modal.tsx: added inline auto-thumbnail generation (Cloudinary first frame + YouTube) for related videos sidebar
+- Updated admin video list: added inline auto-thumbnail via `generateAutoThumbnail()` fallback
+- Removed "Embed Video" text from video-card.tsx placeholder (was showing "Embed Video" label on embed videos without thumbnails)
+- Removed "Embed" badge from video-player-modal.tsx public page (badge with Globe icon that labeled videos as embed)
+- Removed unused `Globe` and `showAsEmbed` imports/variables
+
+Stage Summary:
+- Auto thumbnail from uploaded video: Cloudinary transformation URL `so_0,w_640,h_360,c_fill,q_auto` grabs first frame automatically
+- Auto thumbnail saved to DB: fixed timing bug so thumbnailUrl is properly stored in database
+- Embed thumbnail: YouTube (hqdefault.jpg), Vimeo (vumbnail.com), Dailymotion thumbnails auto-generated
+- All components show auto thumbnails: VideoCard, HeroSection, RelatedVideoItem, Admin video list
+- No more "Embed" text/badge on public pages — embed videos look identical to uploaded videos
+- ESLint: 0 errors, homepage compiles 200

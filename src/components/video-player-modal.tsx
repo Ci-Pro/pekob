@@ -6,7 +6,7 @@ import {
   DialogContent,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { X, Share2, Heart, Eye, Clock, Film, Globe } from "lucide-react";
+import { X, Share2, Heart, Eye, Clock, Film } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
@@ -125,8 +125,7 @@ export function VideoPlayerModal() {
   const legacyEmbedUrl = !isEmbed ? getEmbedUrl(selectedVideo.videoUrl) : null;
   const finalEmbedUrl = directEmbedUrl || legacyEmbedUrl;
 
-  // Determine if this is an embed-type render
-  const showAsEmbed = !!finalEmbedUrl;
+  // Determine how to render the video
 
   return (
     <AnimatePresence>
@@ -180,17 +179,9 @@ export function VideoPlayerModal() {
 
                 {/* Video Info */}
                 <div className="p-4 sm:p-6 overflow-y-auto flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h2 className="text-lg sm:text-xl font-bold text-white flex-1">
-                      {selectedVideo.title}
-                    </h2>
-                    {showAsEmbed && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border border-orange-500/30 text-orange-400">
-                        <Globe className="w-2.5 h-2.5 mr-0.5" />
-                        Embed
-                      </span>
-                    )}
-                  </div>
+                  <h2 className="text-lg sm:text-xl font-bold text-white mb-2">
+                    {selectedVideo.title}
+                  </h2>
 
                   {/* Meta row */}
                   <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
@@ -269,6 +260,19 @@ function RelatedVideoItem({
   video: Video;
   onSelect: () => void;
 }) {
+  // Auto-thumbnail: uploaded thumb → Cloudinary first frame → YouTube/Vimeo/Dailymotion → placeholder
+  const autoThumb = (() => {
+    if (video.thumbnailUrl) return video.thumbnailUrl;
+    if (!video.videoUrl) return null;
+    try {
+      const m = video.videoUrl.match(/res\.cloudinary\.com\/([^/]+)\/video\/upload\/(?:v\d+\/)(.+)\.\w+$/);
+      if (m) return `https://res.cloudinary.com/${m[1]}/video/upload/so_0,w_320,h_180,c_fill,q_auto/${m[2]}.jpg`;
+    } catch {}
+    const yt = video.videoUrl.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    if (yt) return `https://img.youtube.com/vi/${yt[1]}/hqdefault.jpg`;
+    return null;
+  })();
+
   return (
     <motion.button
       whileHover={{ x: 4 }}
@@ -276,9 +280,9 @@ function RelatedVideoItem({
       className="flex gap-3 w-full p-2 rounded-lg hover:bg-white/5 transition-colors text-left group"
     >
       <div className="relative w-36 flex-shrink-0 aspect-video rounded-lg overflow-hidden bg-white/5">
-        {video.thumbnailUrl ? (
+        {autoThumb ? (
           <img
-            src={video.thumbnailUrl}
+            src={autoThumb}
             alt={video.title}
             className="w-full h-full object-cover"
           />

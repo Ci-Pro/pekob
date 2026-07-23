@@ -2,7 +2,7 @@
 
 import type { Video } from "@/types/video";
 import { useVideoStore } from "@/store/video-store";
-import { Play, Eye, Clock, Film, Globe } from "lucide-react";
+import { Play, Eye, Clock, Film } from "lucide-react";
 import { motion } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
 import { id as localeId } from "date-fns/locale";
@@ -11,11 +11,11 @@ import { id as localeId } from "date-fns/locale";
 function getAutoThumbnail(video: Video): string | null {
   if (!video.videoUrl) return null;
 
-  // Cloudinary video: extract public_id and generate video thumbnail
+  // Cloudinary video: extract public_id and generate thumbnail from first frame (so_0)
   try {
-    const cloudMatch = video.videoUrl.match(/res\.cloudinary\.com\/([^/]+)\/video\/upload\/(?:v\d+\/)?(.+?)(?:\.\w+)?$/);
+    const cloudMatch = video.videoUrl.match(/res\.cloudinary\.com\/([^/]+)\/video\/upload\/(?:v\d+\/)(.+)\.\w+$/);
     if (cloudMatch) {
-      return `https://res.cloudinary.com/${cloudMatch[1]}/video/upload/w_640,h_360,c_fill/${cloudMatch[2]}.jpg`;
+      return `https://res.cloudinary.com/${cloudMatch[1]}/video/upload/so_0,w_640,h_360,c_fill,q_auto/${cloudMatch[2]}.jpg`;
     }
   } catch { /* fallback */ }
 
@@ -50,12 +50,11 @@ function ThumbnailImage({ video }: { video: Video }) {
     );
   }
 
-  // Embed video without auto-thumbnail → show embed icon
+  // No thumbnail available → show generic placeholder (same for all types)
   if (video.videoSource === "embed") {
     return (
-      <div className="w-full h-full bg-gradient-to-br from-purple-900/40 via-indigo-900/30 to-black flex flex-col items-center justify-center gap-2">
-        <Globe className="w-8 h-8 text-white/20" />
-        <span className="text-[10px] text-white/20">Embed Video</span>
+      <div className="w-full h-full bg-gradient-to-br from-red-900/40 via-orange-900/30 to-black flex items-center justify-center">
+        <Film className="w-8 h-8 text-white/20" />
       </div>
     );
   }

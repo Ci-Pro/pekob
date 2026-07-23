@@ -109,28 +109,33 @@ function generateAutoThumbnail(url: string, videoSource: string): string | null 
   if (!url) return null;
 
   if (videoSource === "upload") {
-    // Cloudinary video: extract public_id and generate video thumbnail
-    // Pattern: https://res.cloudinary.com/{cloud}/video/upload/.../file.ext
+    // Cloudinary video: extract public_id and generate video thumbnail (first frame)
+    // Pattern: https://res.cloudinary.com/{cloud}/video/upload/v{timestamp}/{folder}/{filename}.ext
     try {
-      const cloudMatch = url.match(/res\.cloudinary\.com\/([^/]+)\/video\/upload\/(?:v\d+\/)?(.+?)(?:\.\w+)?$/);
+      const cloudMatch = url.match(/res\.cloudinary\.com\/([^/]+)\/video\/upload\/(?:v\d+\/)(.+)\.\w+$/);
       if (cloudMatch) {
-        return `https://res.cloudinary.com/${cloudMatch[1]}/video/upload/w_640,h_360,c_fill/${cloudMatch[2]}.jpg`;
+        // so_0 = start offset 0 seconds (first frame), c_fill = crop to fit, q_auto = auto quality
+        return `https://res.cloudinary.com/${cloudMatch[1]}/video/upload/so_0,w_640,h_360,c_fill,q_auto/${cloudMatch[2]}.jpg`;
       }
     } catch { /* fallback */ }
     return null;
   }
 
-  // YouTube
+  // YouTube — works with both share URLs and embed URLs
   const ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
   if (ytMatch) return `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
 
   // Vimeo
-  const vimeoMatch = url.match(/(?:vimeo\.com\/)(?:video\/)?(\d+)/);
+  const vimeoMatch = url.match(/(?:player\.vimeo\.com\/video\/|vimeo\.com\/(?:video\/)?)(\d+)/);
   if (vimeoMatch) return `https://vumbnail.com/${vimeoMatch[1]}.jpg`;
 
   // Dailymotion
   const dmMatch = url.match(/dailymotion\.com\/(?:embed\/)?video\/([a-zA-Z0-9]+)/);
   if (dmMatch) return `https://www.dailymotion.com/thumbnail/video/${dmMatch[1]}`;
+
+  // TikTok
+  const ttMatch = url.match(/tiktok\.com\/@[^/]+\/video\/(\d+)/);
+  if (ttMatch) return null; // TikTok doesn't have a public thumbnail API
 
   // For unknown platforms, no auto-thumbnail available
   return null;
@@ -466,6 +471,7 @@ function AdminDashboard() {
       // Build the payload
       let finalVideoUrl = form.videoUrl;
       let finalVideoSource = "upload";
+      let finalThumbnailUrl = form.thumbnailUrl || null;
 
       if (videoInputMode === "embed" && form.embedUrl) {
         // Convert share URL to embed URL for storage
@@ -478,12 +484,20 @@ function AdminDashboard() {
         finalVideoUrl = embedSrc;
         finalVideoSource = "embed";
 
-        // Auto-generate thumbnail from embed if no thumbnail set
-        if (!form.thumbnailUrl) {
+        // Auto-generate thumbnail from embed if no thumbnail uploaded
+        if (!finalThumbnailUrl) {
           const autoThumb = embedInfo?.thumbnailUrl || generateAutoThumbnail(form.embedUrl, "embed");
           if (autoThumb) {
-            setForm((prev) => ({ ...prev, thumbnailUrl: autoThumb }));
+            finalThumbnailUrl = autoThumb;
           }
+        }
+      }
+
+      // Auto-generate thumbnail from uploaded video if no thumbnail set
+      if (videoInputMode === "upload" && !finalThumbnailUrl && form.videoUrl) {
+        const autoThumb = generateAutoThumbnail(form.videoUrl, "upload");
+        if (autoThumb) {
+          finalThumbnailUrl = autoThumb;
         }
       }
 
@@ -493,7 +507,7 @@ function AdminDashboard() {
         category: form.category,
         videoUrl: finalVideoUrl,
         videoSource: finalVideoSource,
-        thumbnailUrl: form.thumbnailUrl || null,
+        thumbnailUrl: finalThumbnailUrl,
         duration: form.duration,
         isFeatured: form.isFeatured,
       };
@@ -659,17 +673,20 @@ function AdminDashboard() {
                 >
                   {/* Thumbnail */}
                   <div className="relative w-28 sm:w-36 aspect-video rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
-                    {video.thumbnailUrl ? (
-                      <img
-                        src={video.thumbnailUrl}
-                        alt={video.title}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-red-900/40 via-orange-900/30 to-black flex items-center justify-center">
-                        <Film className="w-5 h-5 text-white/20" />
-                      </div>
-                    )}
+                    {(() => {
+                      const thumb = video.thumbnailUrl || generateAutoThumbnail(video.videoUrl, video.videoSource);
+                      return thumb ? (
+                        <img
+                          src={thumb}
+                          alt={video.title}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-red-900/40 via-orange-900/30 to-black flex items-center justify-center">
+                          <Film className="w-5 h-5 text-white/20" />
+                        </div>
+                      );
+                    })()}
                     {video.isFeatured && (
                       <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-red-600 rounded text-[9px] font-bold uppercase">
                         Featured

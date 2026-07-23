@@ -3,20 +3,41 @@
 import { useVideoStore } from "@/store/video-store";
 import { Play, TrendingUp, Clock, Eye, Film } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import type { Video } from "@/types/video";
+
+// Generate auto-thumbnail from Cloudinary video URL (first frame)
+function getAutoThumbnail(video: Video): string | null {
+  if (!video.videoUrl) return null;
+  try {
+    const cloudMatch = video.videoUrl.match(/res\.cloudinary\.com\/([^/]+)\/video\/upload\/(?:v\d+\/)(.+)\.\w+$/);
+    if (cloudMatch) {
+      return `https://res.cloudinary.com/${cloudMatch[1]}/video/upload/so_0,w_1280,h_720,c_fill,q_auto/${cloudMatch[2]}.jpg`;
+    }
+  } catch { /* fallback */ }
+  // YouTube
+  const ytMatch = video.videoUrl.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  if (ytMatch) return `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`;
+  // Vimeo
+  const vimeoMatch = video.videoUrl.match(/(?:player\.vimeo\.com\/video\/|vimeo\.com\/(?:video\/)?)(\d+)/);
+  if (vimeoMatch) return `https://vumbnail.com/${vimeoMatch[1]}.jpg`;
+  return null;
+}
 
 export function HeroSection() {
   const { featuredVideo, playVideo } = useVideoStore();
 
   if (!featuredVideo) return null;
 
+  const heroThumb = featuredVideo.thumbnailUrl || getAutoThumbnail(featuredVideo);
+
   return (
     <section className="relative w-full min-h-[75vh] sm:min-h-[85vh] pt-16 sm:pt-20 overflow-hidden">
       {/* Background Image or Placeholder */}
       <div className="absolute inset-0">
-        {featuredVideo.thumbnailUrl ? (
+        {heroThumb ? (
           <>
             <img
-              src={featuredVideo.thumbnailUrl}
+              src={heroThumb}
               alt={featuredVideo.title}
               className="absolute inset-0 w-full h-full object-cover scale-105"
             />
