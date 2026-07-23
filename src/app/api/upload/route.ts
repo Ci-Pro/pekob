@@ -42,7 +42,10 @@ function isVideoFile(file: File): boolean {
 }
 
 function isImageFile(file: File): boolean {
+  // 1. Check MIME type starts with "image/"
   if (file.type && file.type.startsWith("image/")) return true;
+
+  // 2. Fallback: check file extension (critical for mobile where file.type is often empty "")
   const ext = getFileExtension(file.name);
   return IMAGE_EXTENSIONS.has(ext);
 }

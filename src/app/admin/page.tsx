@@ -315,7 +315,8 @@ function AdminDashboard() {
     setIsFormOpen(true);
   };
 
-  const handleThumbnailUpload = async (file: File) => {
+  // Upload thumbnail to Cloudinary — returns URL on success, null on failure
+  const handleThumbnailUpload = async (file: File): Promise<string | null> => {
     setUploadProgress((prev) => ({ ...prev, thumbnail: true }));
     toast.info("Mengupload thumbnail ke Cloudinary...");
     try {
@@ -328,18 +329,34 @@ function AdminDashboard() {
 
       if (data.error) {
         toast.error(data.error);
-        return;
+        return null;
       }
 
       if (data.url) {
-        setForm((prev) => ({ ...prev, thumbnailUrl: data.url, thumbnailFile: file }));
-        toast.success("Thumbnail berhasil diupload ke Cloudinary");
+        setForm((prev) => ({ ...prev, thumbnailUrl: data.url, thumbnailFile: null }));
+        toast.success("Thumbnail berhasil diupload");
+        return data.url;
       }
     } catch {
       toast.error("Gagal upload thumbnail ke Cloudinary");
     } finally {
       setUploadProgress((prev) => ({ ...prev, thumbnail: false }));
     }
+    return null;
+  };
+
+  // Called when user selects a thumbnail file — uploads immediately + shows preview
+  const handleThumbnailSelect = async (file: File) => {
+    // Show local preview immediately
+    const localUrl = URL.createObjectURL(file);
+    setForm((prev) => ({ ...prev, thumbnailUrl: localUrl, thumbnailFile: file }));
+    // Upload to Cloudinary in background
+    const cloudUrl = await handleThumbnailUpload(file);
+    if (cloudUrl) {
+      // Replace local preview with Cloudinary URL
+      setForm((prev) => ({ ...prev, thumbnailUrl: cloudUrl, thumbnailFile: null }));
+    }
+    // If upload failed, keep the local preview (still saved as data URL on submit)
   };
 
   const handleVideoUpload = async (file: File) => {
@@ -458,20 +475,22 @@ function AdminDashboard() {
     setIsUploading(true);
 
     try {
-      // If upload mode: upload files first
-      if (videoInputMode === "upload") {
-        if (form.thumbnailFile) {
-          await handleThumbnailUpload(form.thumbnailFile);
-        }
-        if (form.videoFile) {
-          await handleVideoUpload(form.videoFile);
-        }
+      // Upload files first (works for BOTH upload and embed modes)
+      let thumbUploadResult: string | null = null;
+
+      if (videoInputMode === "upload" && form.videoFile) {
+        await handleVideoUpload(form.videoFile);
+      }
+      // Upload pending thumbnail file (if user just selected and upload hasn't completed yet)
+      if (form.thumbnailFile) {
+        thumbUploadResult = await handleThumbnailUpload(form.thumbnailFile);
       }
 
       // Build the payload
       let finalVideoUrl = form.videoUrl;
       let finalVideoSource = "upload";
-      let finalThumbnailUrl = form.thumbnailUrl || null;
+      // Use thumbnail from: explicit upload result > form state (already uploaded by handleThumbnailSelect) > null
+      let finalThumbnailUrl = thumbUploadResult || (form.thumbnailUrl && !form.thumbnailUrl.startsWith("blob:") ? form.thumbnailUrl : null);
 
       if (videoInputMode === "embed" && form.embedUrl) {
         // Convert share URL to embed URL for storage
@@ -1057,6 +1076,11 @@ function AdminDashboard() {
                       alt="Thumbnail"
                       className="w-full h-full object-cover"
                     />
+                    {uploadProgress.thumbnail && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                        <Loader2 className="w-5 h-5 animate-spin text-red-400" />
+                      </div>
+                    )}
                     <button
                       type="button"
                       onClick={() =>
@@ -1094,10 +1118,15 @@ function AdminDashboard() {
                     e.stopPropagation();
                     setThumbDragOver(false);
                     const file = e.dataTransfer.files?.[0];
-                    if (file && file.type.startsWith("image/")) {
-                      setForm((prev) => ({ ...prev, thumbnailFile: file }));
-                    } else {
-                      toast.error("File harus berupa gambar");
+                    if (file) {
+                      // Accept by MIME type or extension (mobile compatibility)
+                      const ext = file.name.split(".").pop()?.toLowerCase() || "";
+                      const isImage = file.type.startsWith("image/") || ["jpg","jpeg","png","gif","webp","bmp","tiff","avif","svg"].includes(ext);
+                      if (isImage) {
+                        handleThumbnailSelect(file);
+                      } else {
+                        toast.error("File harus berupa gambar (JPEG, PNG, GIF, WebP, dll.)");
+                      }
                     }
                   }}
                 >
@@ -1120,7 +1149,7 @@ function AdminDashboard() {
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
-                          setForm((prev) => ({ ...prev, thumbnailFile: file }));
+                          handleThumbnailSelect(file);
                         }
                       }}
                     />
