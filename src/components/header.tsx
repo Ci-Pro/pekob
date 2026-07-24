@@ -69,12 +69,16 @@ export function Header() {
             {/* Search Bar - Desktop */}
             <div className="hidden md:flex flex-1 max-w-lg mx-6 lg:mx-10">
               <div className="relative w-full group">
+                <label htmlFor="header-search" className="sr-only">Cari video</label>
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-red-400 transition-colors" />
                 <input
+                  id="header-search"
+                  name="search"
                   type="text"
                   placeholder="Cari video..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  autoComplete="off"
                   className="w-full pl-11 pr-4 py-2.5 bg-white/[0.04] border border-white/[0.08] rounded-full text-sm text-white placeholder:text-muted-foreground/60 focus:outline-none focus:border-red-500/40 focus:bg-white/[0.07] focus:ring-2 focus:ring-red-500/10 transition-all duration-300"
                 />
               </div>
@@ -96,12 +100,16 @@ export function Header() {
             {/* Mobile Search Bar */}
             <div className="md:hidden flex-1 mx-3">
               <div className="relative">
+                <label htmlFor="mobile-search" className="sr-only">Cari video</label>
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60" />
                 <input
+                  id="mobile-search"
+                  name="search"
                   type="text"
                   placeholder="Cari..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  autoComplete="off"
                   className="w-full pl-8.5 pr-3 py-2 bg-white/[0.04] border border-white/[0.06] rounded-full text-[13px] text-white placeholder:text-muted-foreground/40 focus:outline-none focus:border-red-500/30 focus:bg-white/[0.06] transition-all duration-300"
                 />
               </div>

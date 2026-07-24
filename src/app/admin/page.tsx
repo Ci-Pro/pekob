@@ -813,11 +813,15 @@ function AdminDashboard() {
 
         {/* Search */}
         <div className="relative mb-6 max-w-md">
+          <label htmlFor="admin-search" className="sr-only">Cari video</label>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
+            id="admin-search"
+            name="search"
             placeholder="Cari video..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            autoComplete="off"
             className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-muted-foreground focus:border-red-500/50"
           />
         </div>
@@ -945,6 +949,7 @@ function AdminDashboard() {
               <Label htmlFor="title">Judul Video *</Label>
               <Input
                 id="title"
+                name="title"
                 value={form.title}
                 onChange={(e) =>
                   setForm((prev) => ({ ...prev, title: e.target.value }))
@@ -960,6 +965,7 @@ function AdminDashboard() {
               <Label htmlFor="description">Deskripsi</Label>
               <Textarea
                 id="description"
+                name="description"
                 value={form.description}
                 onChange={(e) =>
                   setForm((prev) => ({ ...prev, description: e.target.value }))
@@ -980,6 +986,7 @@ function AdminDashboard() {
               </Label>
               <Input
                 id="category"
+                name="category"
                 list="category-suggestions"
                 value={form.category}
                 onChange={(e) =>
@@ -1003,7 +1010,7 @@ function AdminDashboard() {
 
             {/* ── Video Source Tabs: Upload File vs Embed URL ── */}
             <div className="space-y-3">
-              <Label>Sumber Video *</Label>
+              <p className="text-sm font-medium">Sumber Video *</p>
               {/* Tab buttons */}
               <div className="flex gap-1 p-1 bg-white/5 rounded-lg">
                 <button
@@ -1148,6 +1155,7 @@ function AdminDashboard() {
                     <Label htmlFor="embedUrl" className="text-xs">URL Video / Embed</Label>
                     <Input
                       id="embedUrl"
+                      name="embedUrl"
                       value={form.embedUrl}
                       onChange={(e) => handleEmbedUrlChange(e.target.value)}
                       placeholder='Paste URL video atau paste langsung <iframe src="..."> — semua platform didukung'
@@ -1225,7 +1233,7 @@ function AdminDashboard() {
 
             {/* Thumbnail Upload */}
             <div className="space-y-2">
-              <Label>Thumbnail (opsional — otomatis dari video/embed jika tidak diupload)</Label>
+              <Label htmlFor="thumbnail-upload">Thumbnail (opsional — otomatis dari video/embed jika tidak diupload)</Label>
 
               {/* Upload progress indicator */}
               {uploadProgress.thumbnail && (
@@ -1325,6 +1333,8 @@ function AdminDashboard() {
                     </div>
                     <input
                       ref={fileInputRef}
+                      id="thumbnail-upload"
+                      name="thumbnail"
                       type="file"
                       accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff,.avif,.svg,.heic,.heif"
                       className="hidden"
@@ -1355,9 +1365,10 @@ function AdminDashboard() {
             <div className="flex items-center justify-between py-2">
               <div className="flex items-center gap-2">
                 <Star className="w-4 h-4 text-yellow-500" />
-                <Label>Jadikan Video Unggulan (Featured)</Label>
+                <Label htmlFor="is-featured">Jadikan Video Unggulan (Featured)</Label>
               </div>
               <Switch
+                id="is-featured"
                 checked={form.isFeatured}
                 onCheckedChange={(checked) =>
                   setForm((prev) => ({ ...prev, isFeatured: checked }))
