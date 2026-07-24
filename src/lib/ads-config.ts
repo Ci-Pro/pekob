@@ -1,15 +1,20 @@
 /**
  * Adsterra Ad Configuration
  * ─────────────────────────────
- * All keys are populated from the Adsterra dashboard.
- * Domain: pekobin.vercel.app | Publisher ID: 5932978
+ * Real keys and script URLs from Adsterra dashboard.
+ * Domain: pekobin.vercel.app
  * 
- * To regenerate keys: Adsterra Dashboard → Sites → pekobin.vercel.app → Get Code
+ * Script URL patterns:
+ * - Banner (atOptions): https://www.highperformanceformat.com/{key}/invoke.js
+ * - Popunder: direct script URL
+ * - Social Bar: direct script URL
+ * - Native Banner: invoke.js + container div
+ * - Smartlink: redirect URL
  */
 
 export interface AdPlacement {
-  key: string;        // Adsterra placement key (zone ID from dashboard)
-  format: "iframe";   // Adsterra format — always "iframe" for banners/native
+  key: string;
+  format: "iframe";
   width: number;
   height: number;
 }
@@ -18,64 +23,47 @@ export const ADSTERRA_CONFIG = {
   // Set to false to globally disable all ads
   enabled: true,
 
-  // Popunder ad — highest CPM, triggers on user's first click
+  // Popunder — triggers on first click (highest CPM)
   popunder: {
     enabled: true,
-    key: "30407714", // Zone: Popunder_1
+    scriptUrl: "https://pl30508213.effectivecpmnetwork.com/ba/51/af/ba51afb737520fdfc617bdc7cf001dd4.js",
   },
 
-  // Social Bar — sticky social-style notification bar (bottom/side)
+  // Social Bar — sticky social notification bar
   socialBar: {
     enabled: true,
-    key: "30407715", // Zone: SocialBar_1
+    scriptUrl: "https://pl30508214.effectivecpmnetwork.com/39/ff/bd/39ffbd8ae62d3d58024f1e5c579e9b06.js",
   },
 
-  // Smartlink — auto-optimizing redirect link (useful for CTAs)
+  // Smartlink — auto-optimizing redirect URL
   smartlink: {
     enabled: true,
-    key: "30407716", // Zone: Smartlink_1
+    url: "https://www.effectivecpmnetwork.com/j4jarb40?key=7f1782164eeabf28b1220e561f16fdbf",
   },
 
-  // Native Banner — blends with content, high CTR
+  // Native Banner — blends with content (uses container div pattern)
   nativeBanner: {
     enabled: true,
-    key: "30407717", // Zone: NativeBanner_1
+    scriptUrl: "https://pl30508216.effectivecpmnetwork.com/d261392b9904e6149fd37338027b2f86/invoke.js",
+    containerId: "container-d261392b9904e6149fd37338027b2f86",
     format: "iframe" as const,
     width: 300,
     height: 250,
   },
 
-  // Banner 468x60 — compact horizontal banner (between sections)
-  banner468: {
-    enabled: true,
-    key: "30407718", // Zone: 468x60_1
-    format: "iframe" as const,
-    width: 468,
-    height: 60,
-  },
-
-  // Banner 300x250 — highest CTR banner, used between content & sidebar
+  // Banner 300x250 — highest CTR banner, between content & sidebar
   rectangle: {
     enabled: true,
-    key: "30407719", // Zone: 300x250_1
+    key: "7cc43cfd34264164c5688afa587b23e1",
     format: "iframe" as const,
     width: 300,
     height: 250,
-  },
-
-  // Banner 160x600 — skyscraper, video player sidebar
-  sidebar: {
-    enabled: true,
-    key: "30407720", // Zone: 160x600_1
-    format: "iframe" as const,
-    width: 160,
-    height: 600,
   },
 
   // Banner 728x90 — desktop leaderboard, below hero section
   leaderboard: {
     enabled: true,
-    key: "30407722", // Zone: 728x90_1
+    key: "0da906bbe6936b051f5cc0c36f25c58d",
     format: "iframe" as const,
     width: 728,
     height: 90,
@@ -84,32 +72,58 @@ export const ADSTERRA_CONFIG = {
   // Banner 320x50 — mobile sticky footer
   mobileBanner: {
     enabled: true,
-    key: "30407723", // Zone: 320x50_1
+    key: "3ab6ce7bff1aa57c440f6883a4a12166",
     format: "iframe" as const,
     width: 320,
     height: 50,
   },
 
-  // Banner 160x300 — vertical mini-rectangle (alternative sidebar)
+  // Banner 160x600 — skyscraper, video player sidebar
+  sidebar: {
+    enabled: true,
+    key: "00c6f90602084df3cc3cdf52be6b2f8e",
+    format: "iframe" as const,
+    width: 160,
+    height: 600,
+  },
+
+  // Banner 468x60 — compact horizontal banner
+  banner468: {
+    enabled: true,
+    key: "748b38c0ab44f798f596269fbaf33262",
+    format: "iframe" as const,
+    width: 468,
+    height: 60,
+  },
+
+  // Banner 160x300 — vertical mini-rectangle
   banner160x300: {
     enabled: true,
-    key: "30407721", // Zone: 160x300_1
+    key: "fde26f704fb7dc67eff863c479e86ac2",
     format: "iframe" as const,
     width: 160,
     height: 300,
   },
 
-  // In-feed — uses Native Banner key for blending between video cards
+  // In-feed — uses rectangle (300x250) key for blending between video cards
   inFeed: {
     enabled: true,
-    key: "30407717", // Zone: NativeBanner_1 (reuse native banner for in-feed)
+    key: "7cc43cfd34264164c5688afa587b23e1",
     format: "iframe" as const,
     width: 300,
     height: 250,
   },
 };
 
-// Check if a placement is ready (has valid key, not a placeholder)
+// Script domain for banner ads (atOptions pattern)
+const BANNER_SCRIPT_DOMAIN = "https://www.highperformanceformat.com";
+
+// Build invoke.js URL for a banner key
+export function getBannerScriptUrl(key: string): string {
+  return `${BANNER_SCRIPT_DOMAIN}/${key}/invoke.js`;
+}
+
+// Check if a key-based placement is ready
 export function isAdReady(placement: { key: string; enabled: boolean }): boolean {
   return (
     ADSTERRA_CONFIG.enabled &&
@@ -119,10 +133,12 @@ export function isAdReady(placement: { key: string; enabled: boolean }): boolean
   );
 }
 
-// Adsterra script domains — these load the ad creative
-const ADSTERRA_SCRIPT_DOMAIN = "https://a.magsrv.com";
-
-// Build the invoke.js URL for a given placement key
-export function getAdsterraScriptUrl(key: string): string {
-  return `${ADSTERRA_SCRIPT_DOMAIN}/ad-provider.js`;
+// Check if a script-based placement is ready
+export function isScriptAdReady(placement: { scriptUrl: string; enabled: boolean }): boolean {
+  return (
+    ADSTERRA_CONFIG.enabled &&
+    placement.enabled &&
+    placement.scriptUrl !== "" &&
+    !placement.scriptUrl.startsWith("REPLACE_WITH")
+  );
 }

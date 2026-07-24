@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { ADSTERRA_CONFIG, isAdReady, getAdsterraScriptUrl } from "@/lib/ads-config";
+import { ADSTERRA_CONFIG, isAdReady, getBannerScriptUrl } from "@/lib/ads-config";
 
 interface BannerAdProps {
   placementKey: string;
@@ -14,9 +14,10 @@ interface BannerAdProps {
 }
 
 /**
- * Generic Banner Ad component for Adsterra.
- * Renders a banner of specified dimensions with the Adsterra placement key.
- * Automatically loads the Adsterra script on mount.
+ * Generic Banner Ad — uses atOptions + invoke.js pattern.
+ * This is how Adsterra banner ads work:
+ * 1. Set window.atOptions = { key, format, height, width, params }
+ * 2. Load https://www.highperformanceformat.com/{key}/invoke.js
  */
 export function BannerAd({
   placementKey,
@@ -33,9 +34,8 @@ export function BannerAd({
   useEffect(() => {
     if (!isAdReady({ key: placementKey, enabled }) || scriptLoadedRef.current) return;
 
-    // Set global atOptions for this placement
-    const windowRef = window as unknown as Record<string, unknown>;
-    windowRef.atOptions = {
+    // Set window.atOptions — Adsterra reads this global
+    (window as unknown as Record<string, unknown>).atOptions = {
       key: placementKey,
       format,
       height,
@@ -43,13 +43,11 @@ export function BannerAd({
       params: {},
     };
 
-    // Create and inject the Adsterra script
+    // Inject invoke.js script
     const script = document.createElement("script");
-    script.type = "text/javascript";
+    script.src = getBannerScriptUrl(placementKey);
     script.async = true;
-    script.src = `${getAdsterraScriptUrl(placementKey)}/${placementKey}/invoke.js`;
     scriptLoadedRef.current = true;
-
     containerRef.current?.appendChild(script);
 
     return () => {
@@ -73,59 +71,42 @@ export function BannerAd({
   );
 }
 
-/**
- * Horizontal banner — 728x90 leaderboard, centered.
- * Best placement: below hero section, between video sections.
- */
+/** 728x90 leaderboard — below hero section */
 export function HorizontalBanner({ className }: { className?: string }) {
-  const { leaderboard } = ADSTERRA_CONFIG;
+  const p = ADSTERRA_CONFIG.leaderboard;
   return (
-    <BannerAd
-      placementKey={leaderboard.key}
-      format={leaderboard.format}
-      width={leaderboard.width}
-      height={leaderboard.height}
-      enabled={leaderboard.enabled}
-      className={className}
-      layout="horizontal"
-    />
+    <BannerAd placementKey={p.key} format={p.format} width={p.width} height={p.height} enabled={p.enabled} className={className} layout="horizontal" />
   );
 }
 
-/**
- * Vertical banner — 160x600 skyscraper.
- * Best placement: video player sidebar.
- */
+/** 160x600 skyscraper — video player sidebar */
 export function VerticalBanner({ className }: { className?: string }) {
-  const { sidebar } = ADSTERRA_CONFIG;
+  const p = ADSTERRA_CONFIG.sidebar;
   return (
-    <BannerAd
-      placementKey={sidebar.key}
-      format={sidebar.format}
-      width={sidebar.width}
-      height={sidebar.height}
-      enabled={sidebar.enabled}
-      className={className}
-      layout="vertical"
-    />
+    <BannerAd placementKey={p.key} format={p.format} width={p.width} height={p.height} enabled={p.enabled} className={className} layout="vertical" />
   );
 }
 
-/**
- * Rectangle banner — 300x250, the highest CTR banner format.
- * Best placement: between video cards (in-feed), video player sidebar.
- */
+/** 300x250 rectangle — between sections, in-feed, sidebar */
 export function RectangleBanner({ className }: { className?: string }) {
-  const { rectangle } = ADSTERRA_CONFIG;
+  const p = ADSTERRA_CONFIG.rectangle;
   return (
-    <BannerAd
-      placementKey={rectangle.key}
-      format={rectangle.format}
-      width={rectangle.width}
-      height={rectangle.height}
-      enabled={rectangle.enabled}
-      className={className}
-      layout="horizontal"
-    />
+    <BannerAd placementKey={p.key} format={p.format} width={p.width} height={p.height} enabled={p.enabled} className={className} layout="horizontal" />
+  );
+}
+
+/** 468x60 compact banner */
+export function Banner468({ className }: { className?: string }) {
+  const p = ADSTERRA_CONFIG.banner468;
+  return (
+    <BannerAd placementKey={p.key} format={p.format} width={p.width} height={p.height} enabled={p.enabled} className={className} layout="horizontal" />
+  );
+}
+
+/** 160x300 vertical mini */
+export function Banner160x300({ className }: { className?: string }) {
+  const p = ADSTERRA_CONFIG.banner160x300;
+  return (
+    <BannerAd placementKey={p.key} format={p.format} width={p.width} height={p.height} enabled={p.enabled} className={className} layout="vertical" />
   );
 }

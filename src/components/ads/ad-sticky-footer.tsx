@@ -1,37 +1,33 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ADSTERRA_CONFIG, isAdReady, getAdsterraScriptUrl } from "@/lib/ads-config";
+import { ADSTERRA_CONFIG, isAdReady, getBannerScriptUrl, isScriptAdReady } from "@/lib/ads-config";
 
 /**
- * Sticky Footer Banner — 320x50 banner fixed at the bottom of the screen.
- * Only visible on mobile (< 768px).
- * This is one of the highest-visibility ad placements because it's always on screen.
+ * Sticky Footer Banner (320x50) — fixed at bottom on mobile.
+ * Uses the atOptions banner pattern with a dismiss button.
  */
 export function StickyFooterBanner() {
   const containerRef = useRef<HTMLDivElement>(null);
   const scriptLoadedRef = useRef(false);
   const [visible, setVisible] = useState(true);
-  const { mobileBanner } = ADSTERRA_CONFIG;
+  const p = ADSTERRA_CONFIG.mobileBanner;
 
   useEffect(() => {
-    if (!isAdReady(mobileBanner) || scriptLoadedRef.current) return;
+    if (!isAdReady({ key: p.key, enabled: p.enabled }) || scriptLoadedRef.current || !visible) return;
 
-    const windowRef = window as unknown as Record<string, unknown>;
-    windowRef.atOptions = {
-      key: mobileBanner.key,
-      format: mobileBanner.format,
-      height: mobileBanner.height,
-      width: mobileBanner.width,
+    (window as unknown as Record<string, unknown>).atOptions = {
+      key: p.key,
+      format: p.format,
+      height: p.height,
+      width: p.width,
       params: {},
     };
 
     const script = document.createElement("script");
-    script.type = "text/javascript";
+    script.src = getBannerScriptUrl(p.key);
     script.async = true;
-    script.src = `${getAdsterraScriptUrl(mobileBanner.key)}/${mobileBanner.key}/invoke.js`;
     scriptLoadedRef.current = true;
-
     containerRef.current?.appendChild(script);
 
     return () => {
@@ -39,13 +35,12 @@ export function StickyFooterBanner() {
         containerRef.current.removeChild(script);
       }
     };
-  }, [mobileBanner]);
+  }, [p, visible]);
 
-  if (!isAdReady(mobileBanner) || !visible) return null;
+  if (!isAdReady({ key: p.key, enabled: p.enabled }) || !visible) return null;
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden">
-      {/* Close button */}
       <button
         onClick={() => setVisible(false)}
         className="absolute -top-7 right-2 text-[10px] text-white/40 hover:text-white/70 px-2 py-0.5 z-50"
