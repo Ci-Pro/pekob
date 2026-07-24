@@ -237,7 +237,7 @@ export function VideoPlayerModal() {
                   </h3>
                 </div>
                 {/* Ad in sidebar — high engagement area */}
-                <div className="px-2 pt-3 flex justify-center">
+                <div className="px-2 pt-3 flex justify-center overflow-hidden">
                   <RectangleBanner />
                 </div>
                 <div className="flex-1 overflow-y-auto p-2 space-y-1">

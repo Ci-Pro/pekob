@@ -15,9 +15,7 @@ interface BannerAdProps {
 
 /**
  * Generic Banner Ad — uses atOptions + invoke.js pattern.
- * This is how Adsterra banner ads work:
- * 1. Set window.atOptions = { key, format, height, width, params }
- * 2. Load https://www.highperformanceformat.com/{key}/invoke.js
+ * Responsive: wraps in overflow-hidden container, constrains width.
  */
 export function BannerAd({
   placementKey,
@@ -34,7 +32,6 @@ export function BannerAd({
   useEffect(() => {
     if (!isAdReady({ key: placementKey, enabled }) || scriptLoadedRef.current) return;
 
-    // Set window.atOptions — Adsterra reads this global
     (window as unknown as Record<string, unknown>).atOptions = {
       key: placementKey,
       format,
@@ -43,7 +40,6 @@ export function BannerAd({
       params: {},
     };
 
-    // Inject invoke.js script
     const script = document.createElement("script");
     script.src = getBannerScriptUrl(placementKey);
     script.async = true;
@@ -62,28 +58,33 @@ export function BannerAd({
   return (
     <div
       ref={containerRef}
-      className={`flex ${layout === "horizontal" ? "justify-center" : "justify-start"} ${className}`}
+      className={`ad-slot overflow-hidden ${layout === "horizontal" ? "mx-auto" : ""} ${className}`}
       style={{
         minHeight: height,
-        minWidth: layout === "horizontal" ? Math.min(width, 728) : width,
+        maxWidth: "100%",
+        width: layout === "horizontal" ? "100%" : undefined,
       }}
     />
   );
 }
 
-/** 728x90 leaderboard — below hero section */
+/** 728x90 leaderboard — below hero section, hidden on mobile */
 export function HorizontalBanner({ className }: { className?: string }) {
   const p = ADSTERRA_CONFIG.leaderboard;
   return (
-    <BannerAd placementKey={p.key} format={p.format} width={p.width} height={p.height} enabled={p.enabled} className={className} layout="horizontal" />
+    <div className={`hidden sm:block ${className || ""}`}>
+      <BannerAd placementKey={p.key} format={p.format} width={p.width} height={p.height} enabled={p.enabled} className="w-full" layout="horizontal" />
+    </div>
   );
 }
 
-/** 160x600 skyscraper — video player sidebar */
+/** 160x600 skyscraper — video player sidebar, hidden on mobile/tablet */
 export function VerticalBanner({ className }: { className?: string }) {
   const p = ADSTERRA_CONFIG.sidebar;
   return (
-    <BannerAd placementKey={p.key} format={p.format} width={p.width} height={p.height} enabled={p.enabled} className={className} layout="vertical" />
+    <div className={`hidden lg:block ${className || ""}`}>
+      <BannerAd placementKey={p.key} format={p.format} width={p.width} height={p.height} enabled={p.enabled} className="w-full" layout="vertical" />
+    </div>
   );
 }
 
@@ -91,22 +92,26 @@ export function VerticalBanner({ className }: { className?: string }) {
 export function RectangleBanner({ className }: { className?: string }) {
   const p = ADSTERRA_CONFIG.rectangle;
   return (
-    <BannerAd placementKey={p.key} format={p.format} width={p.width} height={p.height} enabled={p.enabled} className={className} layout="horizontal" />
+    <BannerAd placementKey={p.key} format={p.format} width={p.width} height={p.height} enabled={p.enabled} className={`max-w-[300px] w-full mx-auto ${className || ""}`} layout="horizontal" />
   );
 }
 
-/** 468x60 compact banner */
+/** 468x60 compact banner — hidden on very small screens */
 export function Banner468({ className }: { className?: string }) {
   const p = ADSTERRA_CONFIG.banner468;
   return (
-    <BannerAd placementKey={p.key} format={p.format} width={p.width} height={p.height} enabled={p.enabled} className={className} layout="horizontal" />
+    <div className={`hidden sm:block ${className || ""}`}>
+      <BannerAd placementKey={p.key} format={p.format} width={p.width} height={p.height} enabled={p.enabled} className="w-full" layout="horizontal" />
+    </div>
   );
 }
 
-/** 160x300 vertical mini */
+/** 160x300 vertical mini — hidden on mobile/tablet */
 export function Banner160x300({ className }: { className?: string }) {
   const p = ADSTERRA_CONFIG.banner160x300;
   return (
-    <BannerAd placementKey={p.key} format={p.format} width={p.width} height={p.height} enabled={p.enabled} className={className} layout="vertical" />
+    <div className={`hidden lg:block ${className || ""}`}>
+      <BannerAd placementKey={p.key} format={p.format} width={p.width} height={p.height} enabled={p.enabled} className="w-full" layout="vertical" />
+    </div>
   );
 }

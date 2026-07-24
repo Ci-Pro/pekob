@@ -6,6 +6,7 @@ import { ADSTERRA_CONFIG, isScriptAdReady } from "@/lib/ads-config";
 /**
  * Native Banner Ad — uses invoke.js + container div pattern.
  * Blends naturally with content for high CTR.
+ * Responsive: overflow hidden, max-width 100%.
  */
 export function NativeBannerAd({ className }: { className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -15,7 +16,6 @@ export function NativeBannerAd({ className }: { className?: string }) {
   useEffect(() => {
     if (!isScriptAdReady(nativeBanner) || scriptLoadedRef.current) return;
 
-    // Ensure the container div exists
     const existingContainer = document.getElementById(nativeBanner.containerId);
     if (!existingContainer) {
       const div = document.createElement("div");
@@ -42,7 +42,12 @@ export function NativeBannerAd({ className }: { className?: string }) {
   return (
     <div
       ref={containerRef}
-      className={`flex justify-center min-h-[250px] ${className || ""}`}
+      className={`ad-slot flex justify-center overflow-hidden ${className || ""}`}
+      style={{
+        minHeight: 250,
+        maxWidth: "100%",
+        width: "100%",
+      }}
     />
   );
 }

@@ -6,6 +6,7 @@ import { ADSTERRA_CONFIG, isScriptAdReady } from "@/lib/ads-config";
 /**
  * Social Bar Ad — sticky social-style notification bar.
  * Uses a direct script URL, renders at page bottom.
+ * Responsive: overflow hidden, constrained to viewport.
  */
 export function SocialBarAd() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -30,5 +31,10 @@ export function SocialBarAd() {
 
   if (!isScriptAdReady(socialBar)) return null;
 
-  return <div ref={containerRef} />;
+  return (
+    <div
+      ref={containerRef}
+      className="ad-slot overflow-hidden max-w-[100vw]"
+    />
+  );
 }
