@@ -1,94 +1,111 @@
 /**
  * Adsterra Ad Configuration
  * ─────────────────────────────
- * Replace all "REPLACE_WITH_YOUR_KEY" values with your actual Adsterra placement keys.
+ * All keys are populated from the Adsterra dashboard.
+ * Domain: pekobin.vercel.app | Publisher ID: 5932978
  * 
- * HOW TO GET YOUR KEYS:
- * 1. Go to https://www.adsterra.com/ and sign up / log in
- * 2. Add your website (pekob.com) and wait for approval
- * 3. Go to "Sites" → "Your Site" → "New Zone"
- * 4. Create zones for each ad format (see recommendations below)
- * 5. Copy the "key" value from each zone's code into this file
- * 
- * RECOMMENDED ZONES TO CREATE (highest CTR for video entertainment sites):
- * ─────────────────────────────────────────────────────────────────
- * 1. Banner 300x250   — "Leaderboard" zone → place below hero / between content
- * 2. Banner 728x90    — "Mobile Leaderboard" zone → below header on desktop
- * 3. Banner 320x50    — "Mobile Banner" zone → sticky at bottom on mobile
- * 4. Banner 300x100   — "Social Bar" zone → sticky social notification bar
- * 5. Popunder         — "Popunder" zone → triggers on first click (highest CPM)
- * 
- * TIPS FOR MAXIMUM REVENUE:
- * - Place ads between video cards (in-feed) — highest CTR
- * - Use sticky footer banner on mobile — always visible
- * - Popunder on video play click — natural user interaction
- * - Banner below hero section — first visible area after landing
- * - Banner in video player sidebar — high engagement area
- * ─────────────────────────────────────────────────────────────────
+ * To regenerate keys: Adsterra Dashboard → Sites → pekobin.vercel.app → Get Code
  */
 
 export interface AdPlacement {
-  key: string;        // Adsterra placement key (from dashboard)
+  key: string;        // Adsterra placement key (zone ID from dashboard)
   format: "iframe";   // Adsterra format — always "iframe" for banners/native
   width: number;
   height: number;
 }
 
 export const ADSTERRA_CONFIG = {
-  // Set to false to globally disable all ads (useful during development)
+  // Set to false to globally disable all ads
   enabled: true,
 
   // Popunder ad — highest CPM, triggers on user's first click
-  // This is the MOST profitable ad format for entertainment sites
   popunder: {
     enabled: true,
-    key: "REPLACE_WITH_YOUR_POPUNDER_KEY", // From Adsterra: New Zone → Popunder
+    key: "30407714", // Zone: Popunder_1
   },
 
-  // ── Banner Ad Placements ──
-  // Desktop leaderboard (728x90) — shows below hero section on desktop
+  // Social Bar — sticky social-style notification bar (bottom/side)
+  socialBar: {
+    enabled: true,
+    key: "30407715", // Zone: SocialBar_1
+  },
+
+  // Smartlink — auto-optimizing redirect link (useful for CTAs)
+  smartlink: {
+    enabled: true,
+    key: "30407716", // Zone: Smartlink_1
+  },
+
+  // Native Banner — blends with content, high CTR
+  nativeBanner: {
+    enabled: true,
+    key: "30407717", // Zone: NativeBanner_1
+    format: "iframe" as const,
+    width: 300,
+    height: 250,
+  },
+
+  // Banner 468x60 — compact horizontal banner (between sections)
+  banner468: {
+    enabled: true,
+    key: "30407718", // Zone: 468x60_1
+    format: "iframe" as const,
+    width: 468,
+    height: 60,
+  },
+
+  // Banner 300x250 — highest CTR banner, used between content & sidebar
+  rectangle: {
+    enabled: true,
+    key: "30407719", // Zone: 300x250_1
+    format: "iframe" as const,
+    width: 300,
+    height: 250,
+  },
+
+  // Banner 160x600 — skyscraper, video player sidebar
+  sidebar: {
+    enabled: true,
+    key: "30407720", // Zone: 160x600_1
+    format: "iframe" as const,
+    width: 160,
+    height: 600,
+  },
+
+  // Banner 728x90 — desktop leaderboard, below hero section
   leaderboard: {
     enabled: true,
-    key: "REPLACE_WITH_YOUR_LEADERBOARD_KEY", // From Adsterra: New Zone → Banner 728x90
+    key: "30407722", // Zone: 728x90_1
     format: "iframe" as const,
     width: 728,
     height: 90,
   },
 
-  // Medium rectangle (300x250) — highest CTR banner, used between content
-  rectangle: {
-    enabled: true,
-    key: "REPLACE_WITH_YOUR_RECTANGLE_KEY", // From Adsterra: New Zone → Banner 300x250
-    format: "iframe" as const,
-    width: 300,
-    height: 250,
-  },
-
-  // Mobile banner (320x50) — sticky at bottom on mobile
+  // Banner 320x50 — mobile sticky footer
   mobileBanner: {
     enabled: true,
-    key: "REPLACE_WITH_YOUR_MOBILE_BANNER_KEY", // From Adsterra: New Zone → Banner 320x50
+    key: "30407723", // Zone: 320x50_1
     format: "iframe" as const,
     width: 320,
     height: 50,
   },
 
-  // In-feed native (300x250) — blends between video cards
+  // Banner 160x300 — vertical mini-rectangle (alternative sidebar)
+  banner160x300: {
+    enabled: true,
+    key: "30407721", // Zone: 160x300_1
+    format: "iframe" as const,
+    width: 160,
+    height: 300,
+  },
+
+  // In-feed — uses Native Banner key for blending between video cards
   inFeed: {
     enabled: true,
-    key: "REPLACE_WITH_YOUR_INFEED_KEY", // From Adsterra: New Zone → Banner 300x250 (use same as rectangle or different)
+    key: "30407717", // Zone: NativeBanner_1 (reuse native banner for in-feed)
     format: "iframe" as const,
     width: 300,
     height: 250,
-  },
-
-  // Sidebar banner (160x600) — video player sidebar
-  sidebar: {
-    enabled: true,
-    key: "REPLACE_WITH_YOUR_SIDEBAR_KEY", // From Adsterra: New Zone → Banner 160x600
-    format: "iframe" as const,
-    width: 160,
-    height: 600,
   },
 };
 
