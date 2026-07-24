@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import type { Video } from "@/types/video";
+import { RectangleBanner } from "@/components/ads";
 
 // ── Embed providers configuration ──
 const EMBED_PROVIDERS = [
@@ -234,6 +235,10 @@ export function VideoPlayerModal() {
                   <h3 className="text-sm font-bold text-white">
                     Video Terkait
                   </h3>
+                </div>
+                {/* Ad in sidebar — high engagement area */}
+                <div className="px-2 pt-3 flex justify-center">
+                  <RectangleBanner />
                 </div>
                 <div className="flex-1 overflow-y-auto p-2 space-y-1">
                   {relatedVideos.map((video) => (

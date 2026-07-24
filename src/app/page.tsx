@@ -9,6 +9,7 @@ import { VideoGrid } from "@/components/video-grid";
 import { TrendingSection } from "@/components/trending-section";
 import { Footer } from "@/components/footer";
 import { VideoPlayerModal } from "@/components/video-player-modal";
+import { BelowHeroAd, BetweenSectionsAd } from "@/components/ads";
 import { Sparkles } from "lucide-react";
 
 // Poll interval: 8 seconds
@@ -147,6 +148,9 @@ function HomePage() {
           {/* Category Bar */}
           <CategoryBar />
 
+          {/* Ad — below hero / category bar (high visibility) */}
+          <BelowHeroAd />
+
           {/* Search indicator */}
           {searchQuery && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -157,13 +161,17 @@ function HomePage() {
             </div>
           )}
 
-          {/* Video Grid */}
+          {/* Video Grid — in-feed ad every 6 cards */}
           <VideoGrid
             videos={filteredVideos}
             isLoading={isLoading}
             title={activeCategory || "Video Terbaru"}
             emptyMessage="Tidak ada video ditemukan"
+            adInterval={6}
           />
+
+          {/* Ad — between Video Terbaru and Trending sections */}
+          {!searchQuery && !activeCategory && <BetweenSectionsAd />}
 
           {/* Trending Section */}
           {!searchQuery && !activeCategory && <TrendingSection />}

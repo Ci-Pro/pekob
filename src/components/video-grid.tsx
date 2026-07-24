@@ -2,14 +2,17 @@
 
 import type { Video } from "@/types/video";
 import { VideoCard } from "./video-card";
+import { InFeedAd } from "@/components/ads";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Flame } from "lucide-react";
 
 interface VideoGridProps {
   videos: Video[];
-  isLoading: boolean;
+  isLoading?: boolean;
   title?: string;
   emptyMessage?: string;
+  /** Show an in-feed ad after every N cards (0 = disabled) */
+  adInterval?: number;
 }
 
 export function VideoGrid({
@@ -17,6 +20,7 @@ export function VideoGrid({
   isLoading,
   title,
   emptyMessage = "Belum ada video",
+  adInterval = 0,
 }: VideoGridProps) {
   return (
     <section className="space-y-5">
@@ -39,9 +43,21 @@ export function VideoGrid({
         </div>
       ) : videos.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-5 lg:gap-6">
-          {videos.map((video, index) => (
-            <VideoCard key={video.id} video={video} index={index} />
-          ))}
+          {videos.map((video, index) => {
+            const elements: React.ReactNode[] = [];
+            // Insert in-feed ad at interval
+            if (adInterval > 0 && index > 0 && index % adInterval === 0) {
+              elements.push(
+                <div key={`ad-${index}`}>
+                  <InFeedAd index={index} />
+                </div>
+              );
+            }
+            elements.push(
+              <VideoCard key={video.id} video={video} index={index} />
+            );
+            return elements;
+          })}
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center py-20 text-center">
